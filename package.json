@@ -1,0 +1,15 @@
+{
+  "name": "cs4241-school-benchmarking-project",
+  "version": "1.0.0",
+  "description": "This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "build": "npm run build --prefix backend && npm run build --prefix frontend",
+    "start": "npm run start --prefix backend & npm run start --prefix frontend"
+  },
+  "homepage": "https://github.com/dqdo/CS4241-School-Benchmarking-Project#readme",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
