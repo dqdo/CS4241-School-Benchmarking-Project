@@ -1,15 +1,32 @@
 {
-  "name": "cs4241-school-benchmarking-project",
-  "version": "1.0.0",
-  "description": "This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).",
+  "name": "CS4241-School-Benchmarking-Project",
   "private": true,
+  "version": "0.0.0",
+  "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
-    "build": "npm run build --prefix backend && npm run build --prefix frontend",
-    "start": "npm run start --prefix backend & npm run start --prefix frontend"
+    "dev": "nodemon -w src/server -x tsx src/server/main.ts",
+    "start": "NODE_ENV=production tsx src/server/main.ts",
+    "build": "vite build"
   },
-  "homepage": "https://github.com/dqdo/CS4241-School-Benchmarking-Project#readme",
+  "dependencies": {
+    "@tailwindcss/vite": "^4.1.18",
+    "dotenv": "^17.3.1",
+    "express": "^5.1.0",
+    "mongodb": "^7.1.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tailwindcss": "^4.1.18",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3",
+    "vite-express": "*"
+  },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.15.2",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.4.1",
+    "nodemon": "^3.1.10",
+    "vite": "^6.3.3"
   }
 }
