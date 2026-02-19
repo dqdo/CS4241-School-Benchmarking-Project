@@ -9,14 +9,14 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@tailwindcss/vite": "^4.1.18",
+    "@tailwindcss/vite": "^4.2.0",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "express-openid-connect": "^2.19.4",
     "mongodb": "^7.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "tailwindcss": "^4.1.18",
+    "tailwindcss": "^4.2.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3",
     "vite-express": "*"
