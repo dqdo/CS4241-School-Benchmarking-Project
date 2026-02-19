@@ -14,6 +14,13 @@ function App() {
       fetch("/test1").then(res => res.status === 200 ? res.json() : "").then(data => setTest2(data || ""));
   }, [])
 
+    const getBaseUrl = () => {
+        const protocol = window.location.protocol;
+        const host = window.location.host; // includes the hostname and optional port
+        const baseUrl = `${protocol}//${host}`;
+        return baseUrl;
+    };
+
   return (
     <div className="App">
       <div>
@@ -30,10 +37,10 @@ function App() {
         <p>Text will appear if you are logged in: {test2}</p>
       </div>
         <div hidden={loggedIn}>
-            <a href={"http://localhost:3000/login"}>Log In</a>
+            <a href={getBaseUrl() + "/login"}>Log In</a>
         </div>
         <div hidden={!loggedIn}>
-            <a href={"http://localhost:3000/logout"}>Logout</a>
+            <a href={getBaseUrl() + "/logout"}>Logout</a>
         </div>
       <p className="read-the-docs">
         Click on the Vite and React logos to learn more
