@@ -23,11 +23,11 @@ const config = {
   baseURL: 'http://localhost:3000',
   clientID: process.env.AUTH0_CLIENT_ID,
   clientSecret: process.env.AUTH0_CLIENT_SECRET,
-  issuerBaseURL: 'https://dev-snav07r6ptv5zpat.us.auth0.com',
+  issuerBaseURL: process.env.AUTH0_URL,
   authorizationParams: {
     response_type: 'code',
     scope: 'openid profile email read:roles',
-    audience: 'https://dev-snav07r6ptv5zpat.us.auth0.com/api/v2/',
+    audience: process.env.AUTH0_AUDIENCE,
   },
 };
 
@@ -50,7 +50,24 @@ app.get("/admin/test", async (req, res) => {
     return;
   }
   const data = await db.collection("TestData").findOne();
-  res.json(data).status(200);
+  if(!data){
+    res.json({message: "Data not found"}).status(404);
+    return;
+  }
+  res.json(data.Test1).status(200);
+});
+
+app.get("/test1", async (req, res) => {
+  if(!db){
+    res.json({message: "Failed to connect to DB"}).status(500);
+    return;
+  }
+  const data = await db.collection("TestData").findOne();
+  if(!data){
+    res.json({message: "Data not found"}).status(404);
+    return;
+  }
+  res.json(data.Test2).status(200);
 });
 
 app.get("/loggedIn", (req, res) => {
