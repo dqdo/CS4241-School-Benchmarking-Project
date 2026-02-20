@@ -1,7 +1,8 @@
 function Footer() {
 
     return (
-        <div></div>
+        <footer className="w-full h-20 bg-[#262626] shrink-0">
+        </footer>
     )
 }
 

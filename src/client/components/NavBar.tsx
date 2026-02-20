@@ -35,7 +35,7 @@ function NavBar() {
     }, []);
 
     return (
-        <nav className="w-full shadow-lg h-20 flex items-center justify-between px-4">
+        <nav className="w-full shadow-lg h-20 flex items-center justify-between px-4 bg-white">
             <img src={OspreyLogo} alt="Osprey Logo" />
             <div ref={dropdownRef} className="relative">
                 <img src={UserIcon} className={"cursor-pointer"} alt="User Icon" onClick={() => setOpen((prev) => !prev)} title={user?.email ?? ""}/>

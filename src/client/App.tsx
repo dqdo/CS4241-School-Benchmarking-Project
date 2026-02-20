@@ -1,4 +1,4 @@
-import NavBar from "./components/NavBar";
+
 import TabBar, {TABS} from "./components/TabBar";
 import Footer from "./components/Footer";
 import {useEffect, useState} from "react";
@@ -23,15 +23,13 @@ function App() {
  */
 
   return (
-      <>
-          <NavBar />
+      <div className="h-screen flex flex-col">
           <TabBar tabStatuses={tabsActive} setTabStatuses={setTabsActive} />
-          <div className={"mx-4 bg-blue-300 h-full"}>
-              {tabsActive[0] && <Dashboard />}
-              {tabsActive[1] && <DataEntry />}
-          </div>
-          <Footer />
-      </>
+              <div className="bg-[#F2F2F2] flex-1">
+                  {tabsActive[0] && <Dashboard />}
+                  {tabsActive[1] && <DataEntry />}
+              </div>
+      </div>
   );
 }
 
