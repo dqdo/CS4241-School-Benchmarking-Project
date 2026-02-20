@@ -38,12 +38,12 @@ function NavBar() {
         <nav className="w-full shadow-lg h-20 flex items-center justify-between px-4">
             <img src={OspreyLogo} alt="Osprey Logo" />
             <div ref={dropdownRef} className="relative">
-                <img src={UserIcon} alt="User Icon" onClick={() => setOpen((prev) => !prev)} title={user?.email ?? ""}/>
+                <img src={UserIcon} className={"cursor-pointer"} alt="User Icon" onClick={() => setOpen((prev) => !prev)} title={user?.email ?? ""}/>
                 {open && (
                     <div className="absolute right-0 bg-white mt-2"
                          style={{ boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.1), 0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                         <div className="px-4 py-3">
-                            {user?.email && <p className="font-semibold text-sm text-[#1E3869] max-w-[200px] truncate"
+                            {user?.email && <p className="font-semibold text-sm text-[#1E3869] max-w-50 truncate"
                                                title={isTruncated ? user.email : undefined}>
                                 {user.email}
                             </p>}
