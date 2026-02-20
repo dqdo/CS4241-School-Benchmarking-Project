@@ -44,6 +44,11 @@ let db: Db | undefined = undefined;
   school-user@gmail.com SchoolUser!
  */
 
+app.get("/currentUser", (req, res) => {
+    const user = req.oidc.user;
+    res.status(200).json({email: user?.email });
+});
+
 app.get("/admin/test", async (req, res) => {
   if(!db){
     res.json({message: "Failed to connect to DB"}).status(500);

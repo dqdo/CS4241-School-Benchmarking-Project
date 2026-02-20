@@ -4,9 +4,15 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import App from "./App";
+import NavBar from "./components/NavBar";
+import Footer from "./components/Footer";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+    <React.StrictMode>
+        <div className={"sticky top-0"}>
+            <NavBar/>
+        </div>
+        <App/>
+        <Footer/>
+    </React.StrictMode>,
 );
