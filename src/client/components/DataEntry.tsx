@@ -26,8 +26,7 @@ export default function DataEntry() {
 							? "bg-[#0693E3] text-white"
 							: "bg-gray-200 text-gray-600 hover:bg-gray-300"
 					}`}
-					onClick={() => setActiveForm("enrollment")}
-				>
+					onClick={() => setActiveForm("enrollment")}>
 					Enrollment & Attrition
 				</button>
 			</div>

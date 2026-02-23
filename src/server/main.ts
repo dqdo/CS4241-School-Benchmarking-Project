@@ -11,7 +11,7 @@ dotenv.config();
 const client = new MongoClient(process.env.MONGODB_URI ?? "", {
   serverApi: {
     version: ServerApiVersion.v1,
-    strict: true,
+    strict: false,
     deprecationErrors: true,
   },
 });
@@ -78,6 +78,137 @@ app.get("/test1", async (req, res) => {
 app.get("/loggedIn", (req, res) => {
   res.status(200).json({status: req.oidc.isAuthenticated()});
 })
+
+app.post("/api/submit-admissions", async (req, res) => {
+  if(!client) {
+    return res.status(500).json({ message: "Failed to connect to DB" });
+  }
+  try {
+    //Set up initial collections/dbs
+    const benchmarkDb = client.db("Test-School-Benchmark")
+    const collection = benchmarkDb.collection("AdmissionActivity")
+
+    //Get the current user email
+    const usersCollection = benchmarkDb.collection("Users")
+    const userEmail = req.oidc.user?.email
+    if (!userEmail) {
+      return res.status(401).json({ message: "Unauthorized: No user email found" });
+    }
+
+    //Find the school the user belongs to
+    const userMapping = await usersCollection.findOne({ email: userEmail })
+    if (!userMapping || !userMapping.SCHOOL_ID) {
+      return res.status(403).json({ message: "Forbidden: User is not linked to a school" });
+    }
+    const schoolID = userMapping.SCHOOL_ID
+
+    //Get the school year and grade that we're entering data for
+    if (!req.body.SCHOOL_YR_ID || !req.body.GRADE_DEF_ID) {
+      return res.status(400).json({ message: "School Year and Grade Level are required." });
+    }
+
+    const schoolYearID = parseInt(req.body.SCHOOL_YR_ID, 10);
+    const gradeDefID = parseInt(req.body.GRADE_DEF_ID, 10);
+
+    console.log(`User ${userEmail} is submitting data for School ID: ${schoolID}`);
+
+    //Add keys to this if we're updating those fields
+    const updateFields: any = {};
+
+    //FOR ALL FIELDS, CONVERT TO NUMBER
+    if (req.body.CAPACITY_ENROLL !== undefined) {
+      updateFields.CAPACITY_ENROLL = parseInt(req.body.CAPACITY_ENROLL, 10) || 0;
+    }
+    if (req.body.COMPLETED_APPLICATION_TOTAL !== undefined) {
+      updateFields.COMPLETED_APPLICATION_TOTAL = parseInt(req.body.COMPLETED_APPLICATION_TOTAL, 10) || 0;
+    }
+    if (req.body.ACCEPTANCES_TOTAL !== undefined) {
+      updateFields.ACCEPTANCES_TOTAL = parseInt(req.body.ACCEPTANCES_TOTAL, 10) || 0;
+    }
+    if (req.body.NEW_ENROLLMENTS_BOYS !== undefined) {
+      updateFields.NEW_ENROLLMENTS_BOYS = parseInt(req.body.NEW_ENROLLMENTS_BOYS, 10) || 0;
+    }
+    if (req.body.NEW_ENROLLMENTS_GIRLS !== undefined) {
+      updateFields.NEW_ENROLLMENTS_GIRLS = parseInt(req.body.NEW_ENROLLMENTS_GIRLS, 10) || 0;
+    }
+
+    //For the exact school and year, update the fields we were given, and create if it doesn't exist
+    const result = await collection.updateOne(
+        { SCHOOL_ID: schoolID, SCHOOL_YR_ID: schoolYearID, GRADE_DEF_ID: gradeDefID },
+        { $set: updateFields }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        message: "No existing record found for this Grade and Year combination. Cannot update."
+      });
+    }
+
+    res.status(200).json({ message: "Successfully saved data", result });
+  }
+  catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+})
+
+app.get("/api/available-years", async (req, res) => {
+  // Use client instead of db, since we call client.db() anyway!
+  if(!client) return res.status(500).json({ message: "No DB connection" });
+
+  try {
+    const benchmarkDb = client.db("Test-School-Benchmark");
+
+    // Add the optional chaining (?.) to oidc just in case it's missing
+    const userEmail = req.oidc?.user?.email;
+    const userMapping = await benchmarkDb.collection("Users").findOne({ email: userEmail });
+    if (!userMapping || !userMapping.SCHOOL_ID) return res.status(403).json({ message: "No school linked" });
+    const schoolID = userMapping.SCHOOL_ID;
+
+    const activeYearIds = await benchmarkDb.collection("AdmissionActivity").distinct("SCHOOL_YR_ID", { SCHOOL_ID: schoolID });
+
+    const years = await benchmarkDb.collection("SchoolYear")
+        .find({ ID: { $in: activeYearIds } })
+        .sort({ ID: -1 })
+        .toArray();
+
+    res.status(200).json(years);
+  } catch (error) {
+    // THIS IS THE MAGIC LINE: It prints the exact crash reason to your Node terminal
+    console.error("CRASH IN /api/available-years:", error);
+    res.status(500).json({ message: "Error fetching years" });
+  }
+});
+
+app.get("/api/available-grades", async (req, res) => {
+  if(!client) return res.status(500).json({ message: "No DB connection" });
+  try {
+    const benchmarkDb = client.db("Test-School-Benchmark");
+
+    const userEmail = req.oidc?.user?.email;
+    const userMapping = await benchmarkDb.collection("Users").findOne({ email: userEmail });
+    if (!userMapping || !userMapping.SCHOOL_ID) return res.status(403).json({ message: "No school linked" });
+    const schoolID = userMapping.SCHOOL_ID;
+
+    const selectedYearId = parseInt(req.query.yearId as string, 10);
+    if (!selectedYearId) return res.status(400).json({ message: "Year ID required" });
+
+    const activeGradeIds = await benchmarkDb.collection("AdmissionActivity").distinct("GRADE_DEF_ID", {
+      SCHOOL_ID: schoolID,
+      SCHOOL_YR_ID: selectedYearId
+    });
+
+    const grades = await benchmarkDb.collection("GradeDefinitions")
+        .find({ ID: { $in: activeGradeIds } })
+        .sort({ ORDER_NO: 1 })
+        .toArray();
+
+    res.status(200).json(grades);
+  } catch (error) {
+    console.error("CRASH IN /api/available-grades:", error);
+    res.status(500).json({ message: "Error fetching grades" });
+  }
+});
 
 ViteExpress.listen(app, 3000, async () => {
   await client.connect();
