@@ -132,12 +132,13 @@ app.post("/api/submit-admissions", async (req, res) => {
       updateFields.NEW_ENROLLMENTS_GIRLS = parseInt(req.body.NEW_ENROLLMENTS_GIRLS, 10) || 0;
     }
 
-    //For the exact school and year, update the fields we were given, and create if it doesn't exist
+    //For the exact school and year, update the fields we were given. Only modify existing entries, don't make new oness
     const result = await collection.updateOne(
         { SCHOOL_ID: schoolID, SCHOOL_YR_ID: schoolYearID, GRADE_DEF_ID: gradeDefID },
         { $set: updateFields }
     );
 
+    //If we didn't update something, then say it failed
     if (result.matchedCount === 0) {
       return res.status(404).json({
         message: "No existing record found for this Grade and Year combination. Cannot update."
@@ -153,20 +154,19 @@ app.post("/api/submit-admissions", async (req, res) => {
 })
 
 app.get("/api/available-years", async (req, res) => {
-  // Use client instead of db, since we call client.db() anyway!
   if(!client) return res.status(500).json({ message: "No DB connection" });
 
   try {
     const benchmarkDb = client.db("Test-School-Benchmark");
 
-    // Add the optional chaining (?.) to oidc just in case it's missing
+    //Get the user and the school ID
     const userEmail = req.oidc?.user?.email;
     const userMapping = await benchmarkDb.collection("Users").findOne({ email: userEmail });
     if (!userMapping || !userMapping.SCHOOL_ID) return res.status(403).json({ message: "No school linked" });
     const schoolID = userMapping.SCHOOL_ID;
 
+    //Figure out which year IDs have admissions entries for this school
     const activeYearIds = await benchmarkDb.collection("AdmissionActivity").distinct("SCHOOL_YR_ID", { SCHOOL_ID: schoolID });
-
     const years = await benchmarkDb.collection("SchoolYear")
         .find({ ID: { $in: activeYearIds } })
         .sort({ ID: -1 })
@@ -174,7 +174,6 @@ app.get("/api/available-years", async (req, res) => {
 
     res.status(200).json(years);
   } catch (error) {
-    // THIS IS THE MAGIC LINE: It prints the exact crash reason to your Node terminal
     console.error("CRASH IN /api/available-years:", error);
     res.status(500).json({ message: "Error fetching years" });
   }
@@ -193,6 +192,7 @@ app.get("/api/available-grades", async (req, res) => {
     const selectedYearId = parseInt(req.query.yearId as string, 10);
     if (!selectedYearId) return res.status(400).json({ message: "Year ID required" });
 
+    //Based on the year we selected, figure out which grade IDs have entries for this year
     const activeGradeIds = await benchmarkDb.collection("AdmissionActivity").distinct("GRADE_DEF_ID", {
       SCHOOL_ID: schoolID,
       SCHOOL_YR_ID: selectedYearId

@@ -1,6 +1,5 @@
 import {useState, useEffect } from 'react';
-import { Tooltip } from 'flowbite-react';
-import {response} from "express";
+import TooltipInput from './TooltipInput'
 
 export default function AdmissionsForm() {
     //Group form data. Data is from the ADMISSION_ACTIVITY db table
@@ -97,8 +96,7 @@ export default function AdmissionsForm() {
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
             <h2 className="text-2xl font-semibold text-[#1E3869]">Admissions Activity</h2>
-            <p className="text-gray-600 text-sm">Enter the total capacity and pipeline numbers for the current school
-                year.</p>
+            <p className="text-gray-600 text-sm">Enter the total capacity and pipeline numbers for the current school year.</p>
 
             {/* --- Dropdown Row --- */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 p-4 bg-gray-50 border border-gray-200 rounded-lg">
@@ -144,116 +142,50 @@ export default function AdmissionsForm() {
             {/* --- End Dropdown Row --- */}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="flex flex-col">
-                    <span className="text-sm font-semibold flex flex-row gap-2">
-                        <label className="font-semibold text-sm mb-1">Total Enrollment Capacity</label>
-                        <Tooltip content="The maximum number of students your school can accommodate." placement="top" style="light" arrow={false}>
-                            <svg width="18px" height="18px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="cursor-help">
-                                <g clipPath="url(#clip0_429_11160)">
-                                    <circle cx="12" cy="11.9999" r="9" stroke="#292929" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <rect x="12" y="8" width="0.01" height="0.01" stroke="#292929" strokeWidth="3.75" strokeLinejoin="round"/>
-                                    <path d="M12 12V16" stroke="#292929" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                </g>
-                            </svg>
-                        </Tooltip>
-                    </span>
-                    <input
-                        type="number"
-                        name="CAPACITY_ENROLL"
-                        value={formData.CAPACITY_ENROLL}
-                        onChange={handleChange}
-                        className="border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-[#0693E3]"
-                        required
-                    />
-                </div>
+                <TooltipInput
+                    label="Total Enrollment Capacity"
+                    tooltipText="The maximum number of students your school can accommodate."
+                    name="CAPACITY_ENROLL"
+                    value={formData.CAPACITY_ENROLL}
+                    onChange={handleChange}
+                    required={true}
+                />
 
-                <div className="flex flex-col">
-                    <span className="text-sm font-semibold flex flex-row gap-2">
-                        <label className="font-semibold text-sm mb-1">Total Completed Applications</label>
-                        <Tooltip content="The total number of fully completed submitted applications." placement="top" style="light" arrow={false}>
-                            <svg width="18px" height="18px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="cursor-help">
-                                <g clipPath="url(#clip0_429_11160)">
-                                    <circle cx="12" cy="11.9999" r="9" stroke="#292929" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <rect x="12" y="8" width="0.01" height="0.01" stroke="#292929" strokeWidth="3.75" strokeLinejoin="round"/>
-                                    <path d="M12 12V16" stroke="#292929" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                </g>
-                            </svg>
-                        </Tooltip>
-                    </span>
-                    <input
-                        type="number"
-                        name="COMPLETED_APPLICATION_TOTAL"
-                        value={formData.COMPLETED_APPLICATION_TOTAL}
-                        onChange={handleChange}
-                        className="border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-[#0693E3]"
-                    />
-                </div>
+                <TooltipInput
+                    label="Total Completed Applications"
+                    tooltipText="The total number of fully completed submitted applications."
+                    name="COMPLETED_APPLICATION_TOTAL"
+                    value={formData.COMPLETED_APPLICATION_TOTAL}
+                    onChange={handleChange}
+                    required={true}
+                />
 
-                <div className="flex flex-col">
-                    <span className="text-sm font-semibold flex flex-row gap-2">
-                        <label className="font-semibold text-sm mb-1">Total Acceptances</label>
-                        <Tooltip content="The total number of accepted students." placement="top" style="light" arrow={false}>
-                            <svg width="18px" height="18px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="cursor-help">
-                                <g clipPath="url(#clip0_429_11160)">
-                                    <circle cx="12" cy="11.9999" r="9" stroke="#292929" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <rect x="12" y="8" width="0.01" height="0.01" stroke="#292929" strokeWidth="3.75" strokeLinejoin="round"/>
-                                    <path d="M12 12V16" stroke="#292929" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                </g>
-                            </svg>
-                        </Tooltip>
-                    </span>
-                    <input
-                        type="number"
-                        name="ACCEPTANCES_TOTAL"
-                        value={formData.ACCEPTANCES_TOTAL}
-                        onChange={handleChange}
-                        className="border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-[#0693E3]"
-                    />
-                </div>
+                <TooltipInput
+                    label="Total Acceptances"
+                    tooltipText="The total number of accepted students."
+                    name="ACCEPTANCES_TOTAL"
+                    value={formData.ACCEPTANCES_TOTAL}
+                    onChange={handleChange}
+                    required={true}
+                />
 
-                <div className="flex flex-col">
-                    <span className="text-sm font-semibold flex flex-row gap-2">
-                        <label className="font-semibold text-sm mb-1">Total New Enrollments (Boys)</label>
-                        <Tooltip content="The total number of newly enrolled boys for the year." placement="top" style="light" arrow={false}>
-                            <svg width="18px" height="18px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="cursor-help">
-                                <g clipPath="url(#clip0_429_11160)">
-                                    <circle cx="12" cy="11.9999" r="9" stroke="#292929" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <rect x="12" y="8" width="0.01" height="0.01" stroke="#292929" strokeWidth="3.75" strokeLinejoin="round"/>
-                                    <path d="M12 12V16" stroke="#292929" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                </g>
-                            </svg>
-                        </Tooltip>
-                    </span>
-                    <input
-                        type="number"
-                        name="NEW_ENROLLMENTS_BOYS"
-                        value={formData.NEW_ENROLLMENTS_BOYS}
-                        onChange={handleChange}
-                        className="border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-[#0693E3]"
-                    />
-                </div>
+                <TooltipInput
+                    label="Total New Enrollments (Boys)"
+                    tooltipText="The total number of fully completed submitted applications."
+                    name="NEW_ENROLLMENTS_BOYS"
+                    value={formData.NEW_ENROLLMENTS_BOYS}
+                    onChange={handleChange}
+                    required={true}
+                />
 
-                <div className="flex flex-col">
-                    <span className="text-sm font-semibold flex flex-row gap-2">
-                        <label className="font-semibold text-sm mb-1">Total New Enrollments (Girls)</label>
-                        <Tooltip content="The total number of newly enrolled girls for the year." placement="top" style="light" arrow={false}>
-                            <svg width="18px" height="18px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="cursor-help">
-                                <g clipPath="url(#clip0_429_11160)">
-                                    <circle cx="12" cy="11.9999" r="9" stroke="#292929" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <rect x="12" y="8" width="0.01" height="0.01" stroke="#292929" strokeWidth="3.75" strokeLinejoin="round"/>
-                                    <path d="M12 12V16" stroke="#292929" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                </g>
-                            </svg>
-                        </Tooltip>
-                    </span>
-                    <input
-                        type="number"
-                        name="NEW_ENROLLMENTS_GIRLS"
-                        value={formData.NEW_ENROLLMENTS_GIRLS}
-                        onChange={handleChange}
-                        className="border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-[#0693E3]"
-                    />
-                </div>
+                <TooltipInput
+                    label="Total New Enrollments (Girls)"
+                    tooltipText="The total number of newly enrolled girls for the year."
+                    name="NEW_ENROLLMENTS_GIRLS"
+                    value={formData.NEW_ENROLLMENTS_GIRLS}
+                    onChange={handleChange}
+                    required={true}
+                />
             </div>
 
             <div className="flex justify-end pt-4">
