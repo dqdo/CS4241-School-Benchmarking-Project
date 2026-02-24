@@ -5,12 +5,17 @@ import {Db, MongoClient, ServerApiVersion} from "mongodb";
 import {auth} from "express-openid-connect"
 import {requireAdmin, requireAuth} from "../middleware/auth.js";
 import {GoogleGenAI} from "@google/genai";
+import fs from 'fs';
 
 const app = express();
 dotenv.config();
 
 // Initialise Gemini client using the key from .env
 const ai = new GoogleGenAI({apiKey: process.env.GEMINI_API_KEY});
+
+
+const rawData = fs.readFileSync('./src/server/config.json', 'utf8');
+const configData = JSON.parse(rawData);
 
 const client = new MongoClient(process.env.MONGODB_URI ?? "", {
   serverApi: {
@@ -96,6 +101,9 @@ app.post("/chat", async (req, res) => {
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: message,
+            config: {
+                systemInstruction: configData.admin
+            }
         });
 
         res.status(200).json({reply: response.text});

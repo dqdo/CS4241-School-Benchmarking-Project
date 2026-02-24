@@ -5,7 +5,7 @@ export default function ChatWindow() {
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [messages, setMessages] = useState([
-        { role: "assistant", text: "Hi! How can I help?" },
+        { role: "assistant", text: "" },
     ]);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
