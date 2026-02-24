@@ -6,6 +6,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import NavBar from "./components/NavBar";
 import Footer from "./components/Footer";
+import ChatWindow from "./components/ChatWindow";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
@@ -13,6 +14,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
             <NavBar/>
         </div>
         <App/>
+        <ChatWindow />
         <Footer/>
     </React.StrictMode>,
 );
