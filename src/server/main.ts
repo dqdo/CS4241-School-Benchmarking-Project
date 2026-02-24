@@ -4,18 +4,10 @@ import * as dotenv from "dotenv"
 import {Db, MongoClient, ServerApiVersion} from "mongodb";
 import {auth} from "express-openid-connect"
 import {requireAdmin, requireAuth} from "../middleware/auth.js";
-import {GoogleGenAI} from "@google/genai";
-import fs from 'fs';
+import chatbot from "./chatbot-ai.ts";
 
 const app = express();
 dotenv.config();
-
-// Initialise Gemini client using the key from .env
-const ai = new GoogleGenAI({apiKey: process.env.GEMINI_API_KEY});
-
-
-const rawData = fs.readFileSync('./src/server/config.json', 'utf8');
-const configData = JSON.parse(rawData);
 
 const client = new MongoClient(process.env.MONGODB_URI ?? "", {
   serverApi: {
@@ -44,6 +36,7 @@ app.use(express.json());
 app.use(auth(config));
 app.use("/", requireAuth); // get/post is always protected by being logged in. If not logged in, users are redirected to login page
 app.use("/admin", requireAdmin); // get/post path should be /admin/xxx if the route should only be accessed my admins
+app.use("/", chatbot);
 
 let db: Db | undefined = undefined;
 
@@ -84,33 +77,7 @@ app.get("/test1", async (req, res) => {
   res.json(data.Test2).status(200);
 });
 
-app.get("/loggedIn", (req, res) => {
-  res.status(200).json({status: req.oidc.isAuthenticated()});
-});
-
-// Receives a user message, calls Gemini via the SDK, and returns the AI reply
-app.post("/chat", async (req, res) => {
-    const {message} = req.body;
-
-    if (!message || typeof message !== "string") {
-        res.status(400).json({error: "Missing or invalid message"});
-        return;
-    }
-
-    try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: message,
-            config: {
-                systemInstruction: configData.admin
-            }
-        });
-
-        res.status(200).json({reply: response.text});
-    } catch (err) {
-        console.error("Gemini error:", err);
-        res.status(500).json({error: "Gemini request failed"});
-    }
+app.get("/loggedIn", (req, res) => {res.status(200).json({status: req.oidc.isAuthenticated()});
 });
 
 ViteExpress.listen(app, 3000, async () => {

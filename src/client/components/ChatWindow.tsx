@@ -1,25 +1,31 @@
 import { useState, useRef, useEffect } from "react";
+import ChatIcon from "../assets/Chat-Icon.svg";
+import ExitCross from "../assets/Exit-Cross.svg";
+import ExpandIcon from "../assets/Expand.svg";
+import CollapseIcon from "../assets/Collapse.svg";
 
 export default function ChatWindow() {
     const [isOpen, setIsOpen] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
-    const [messages, setMessages] = useState([
-        { role: "assistant", text: "" },
-    ]);
+    const [messages, setMessages] = useState<{ role: string; text: string }[]>([]);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    // Auto-scroll to the latest message whenever messages update
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
     function toggleChat() {
         setIsOpen((prev) => !prev);
+        if (isOpen) setIsExpanded(false);
     }
 
-    // Sends the user message to the /chat endpoint and appends the AI reply
+    function toggleExpand() {
+        setIsExpanded((prev) => !prev);
+    }
+
     async function sendMessage(e: React.FormEvent) {
         e.preventDefault();
         const trimmed = input.trim();
@@ -33,7 +39,13 @@ export default function ChatWindow() {
             const res = await fetch("/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: trimmed }),
+                body: JSON.stringify({
+                    message: trimmed,
+                    history: messages.map((m) => ({
+                        role: m.role === "user" ? "user" : "model",
+                        parts: [{ text: m.text }],
+                    })),
+                }),
             });
 
             const data = await res.json();
@@ -51,34 +63,85 @@ export default function ChatWindow() {
     }
 
     return (
-        <div className="fixed bottom-0 right-4 z-50 w-80">
-            {isOpen && (
-                <div className="bg-white border border-gray-200 shadow-xl rounded-t-xl overflow-hidden">
-                    <div className="h-72 p-3 overflow-y-auto space-y-2">
-                        {messages.map((m, idx) => (
-                            <div
-                                key={idx}
-                                className={`max-w-[85%] px-3 py-2 rounded-xl text-sm ${
-                                    m.role === "user"
-                                        ? "ml-auto bg-blue-600 text-white"
-                                        : "mr-auto bg-gray-100 text-gray-900"
-                                }`}
-                            >
-                                {m.text}
-                            </div>
-                        ))}
+        <div className="fixed bottom-4 right-4 z-50">
+            <div
+                className="relative flex flex-col bg-[#1E3869] shadow-2xl overflow-hidden"
+                style={{
+                    width: isOpen ? (isExpanded ? "520px" : "320px") : "48px",
+                    height: isOpen ? (isExpanded ? "620px" : "420px") : "48px",
+                    borderRadius: isOpen ? "16px" : "50%",
+                    transition:
+                        "width 380ms cubic-bezier(0.34, 1.2, 0.64, 1), height 380ms cubic-bezier(0.34, 1.2, 0.64, 1), border-radius 380ms ease",
+                }}
+            >
+                <div
+                    className="flex flex-col flex-1 overflow-hidden"
+                    style={{
+                        opacity: isOpen ? 1 : 0,
+                        pointerEvents: isOpen ? "auto" : "none",
+                        transition: "opacity 180ms ease",
+                        transitionDelay: isOpen ? "220ms" : "0ms",
+                    }}
+                >
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-white/15">
+                        <span className="text-white text-sm font-semibold tracking-wide">
+                            AI Assistant
+                        </span>
+                        <button
+                            onClick={toggleExpand}
+                            aria-label={isExpanded ? "Shrink chat" : "Expand chat"}
+                            className="flex items-center justify-center p-1 opacity-80 hover:opacity-100 transition-opacity cursor-pointer bg-transparent border-none"
+                        >
+                            {isExpanded ? (
+                                <img src={CollapseIcon} alt="Collapse" width={16} height={16} />
+                            ) : (
+                                <img src={ExpandIcon} alt="Expand" width={16} height={16} />
+                            )}
+                        </button>
+                    </div>
 
-                        {/* Typing indicator shown while waiting for Gemini response */}
+                    <div className="flex-1 p-3 overflow-y-auto space-y-2 bg-white">
+                        {messages.length === 0 ? (
+                            <div className="flex items-center justify-center pt-4">
+                                <p className="text-gray-300 text-sm text-center select-none">
+                                    Ask me anything to get started...
+                                </p>
+                            </div>
+                        ) : (
+                            messages.map((m, idx) => (
+                                <div
+                                    key={idx}
+                                    className={`w-fit max-w-[85%] px-3 py-2 rounded-xl text-sm ${
+                                        m.role === "user"
+                                            ? "ml-auto bg-blue-600 text-white"
+                                            : "mr-auto bg-gray-100 text-gray-900"
+                                    }`}
+                                >
+                                    {m.text}
+                                </div>
+                            ))
+                        )}
+
                         {isLoading && (
-                            <div className="mr-auto bg-gray-100 text-gray-500 px-3 py-2 rounded-xl text-sm max-w-[85%]">
-                                Thinking...
+                            <div className="mr-auto flex items-center gap-1 px-1 py-2">
+                                <style>{`
+                                    @keyframes blink {
+                                        0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+                                        40% { opacity: 1; transform: scale(1); }
+                                    }
+                                `}</style>
+                                <span className="w-2 h-2 rounded-full bg-gray-400 inline-block" style={{ animation: "blink 1.2s infinite 0ms" }} />
+                                <span className="w-2 h-2 rounded-full bg-gray-400 inline-block" style={{ animation: "blink 1.2s infinite 400ms" }} />
+                                <span className="w-2 h-2 rounded-full bg-gray-400 inline-block" style={{ animation: "blink 1.2s infinite 800ms" }} />
                             </div>
                         )}
 
                         <div ref={messagesEndRef} />
                     </div>
-
-                    <form onSubmit={sendMessage} className="p-2 border-t border-gray-200 flex gap-2">
+                    <form
+                        onSubmit={sendMessage}
+                        className="flex gap-2 bg-white p-2 pr-14 border-t border-gray-200"
+                    >
                         <input
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
@@ -89,20 +152,41 @@ export default function ChatWindow() {
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm disabled:opacity-50"
+                            className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm disabled:opacity-50 cursor-pointer"
                         >
                             Send
                         </button>
                     </form>
                 </div>
-            )}
-
-            <button
-                onClick={toggleChat}
-                className="w-full bg-[#0693E3] text-white rounded-t-xl text-center cursor-pointer py-3"
-            >
-                {isOpen ? "Close" : "Speak with an AI Agent!"}
-            </button>
+                <button
+                    onClick={toggleChat}
+                    aria-label={isOpen ? "Close chat" : "Open chat"}
+                    className="absolute bottom-0 right-0 w-12 h-12 flex items-center justify-center bg-transparent border-none cursor-pointer z-10"
+                >
+                    <img
+                        src={ChatIcon}
+                        alt="Chat"
+                        width={28}
+                        height={28}
+                        className="absolute transition-all duration-200 ease-in-out"
+                        style={{
+                            opacity: isOpen ? 0 : 1,
+                            transform: isOpen ? "rotate(90deg) scale(0.3)" : "rotate(0deg) scale(1)",
+                        }}
+                    />
+                    <img
+                        src={ExitCross}
+                        alt="Close"
+                        width={28}
+                        height={28}
+                        className="absolute transition-all duration-200 ease-in-out"
+                        style={{
+                            opacity: isOpen ? 1 : 0,
+                            transform: isOpen ? "rotate(0deg) scale(1)" : "rotate(-90deg) scale(0.3)",
+                        }}
+                    />
+                </button>
+            </div>
         </div>
     );
 }
