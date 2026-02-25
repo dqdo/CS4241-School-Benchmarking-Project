@@ -49,31 +49,31 @@ app.get("/currentUser", (req, res) => {
     res.status(200).json({email: user?.email });
 });
 
-app.get("/admin/test", async (req, res) => {
+app.get("/admissions", async (req, res) => {
   if(!db){
-    res.json({message: "Failed to connect to DB"}).status(500);
-    return;
+    return res.status(500).send("Database connection error");
   }
-  const data = await db.collection("TestData").findOne();
-  if(!data){
-    res.json({message: "Data not found"}).status(404);
-    return;
-  }
-  res.json(data.Test1).status(200);
+  const school = req.query.school ? Number(req.query.school) : undefined;
+  const year = req.query.year ? Number(req.query.year) : undefined;
+
+  const data = await db.collection("AdmissionActivity").find(
+      {SCHOOL_ID: school, SCHOOL_YR_ID: year},
+      { projection: { _id: false, ACCEPTANCES_BOYS: true, ACCEPTANCES_GIRLS: true, GRADE_DEF_ID:true } }
+  ).toArray();
+  return res.status(200).json(data);
+})
+
+app.get("/schools", async (req, res) => {
+  if(!db)
+    return res.status(500).send("Database connection error");
+
+  const data = await db.collection("School").find(
+      {},
+      { projection: { _id: false, ID: true, NAME_TX: true } }
+  ).toArray();
+  return res.status(200).json(data);
 });
 
-app.get("/test1", async (req, res) => {
-  if(!db){
-    res.json({message: "Failed to connect to DB"}).status(500);
-    return;
-  }
-  const data = await db.collection("TestData").findOne();
-  if(!data){
-    res.json({message: "Data not found"}).status(404);
-    return;
-  }
-  res.json(data.Test2).status(200);
-});
 
 app.get("/loggedIn", (req, res) => {
   res.status(200).json({status: req.oidc.isAuthenticated()});
@@ -83,6 +83,6 @@ ViteExpress.listen(app, 3000, async () => {
   await client.connect();
   console.log('Connected to MongoDB');
 
-  db = client.db("Test");
+  db = client.db("School-Benchmark");
   console.log("Server is listening on port 3000...");
 });

@@ -4,6 +4,7 @@ import Footer from "./components/Footer";
 import {useEffect, useState} from "react";
 import Dashboard from "./components/Dashboard";
 import DataEntry from "./components/DataEntry";
+import Admissions from "./components/Admissions";
 
 function App() {
     const [tabsActive, setTabsActive] = useState<boolean[]>([]);
@@ -28,6 +29,7 @@ function App() {
               <div className="bg-[#F2F2F2] flex-1">
                   {tabsActive[0] && <Dashboard />}
                   {tabsActive[1] && <DataEntry />}
+                  {tabsActive[2] && <Admissions />}
               </div>
       </div>
   );

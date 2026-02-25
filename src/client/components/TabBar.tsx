@@ -9,6 +9,7 @@ export type TabBarProps = {
 export const TABS = [
 	"Dashboard",
 	"Data Entry",
+	"Admissions"
 ] as const;
 
 export type Tab = typeof TABS[number]; // for TypeScript to stop being mad
