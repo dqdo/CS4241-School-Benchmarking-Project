@@ -138,13 +138,6 @@ app.post("/api/submit-admissions", async (req, res) => {
       updateFields.CONTRACTED_ENROLL_NB = parseInt(req.body.CONTRACTED_ENROLL_NB, 10) || 0;
     }
 
-    //Calculate total enrollments if the value exists
-    if (updateFields.NEW_ENROLLMENTS_BOYS !== undefined || updateFields.NEW_ENROLLMENTS_GIRLS !== undefined) {
-      const boys = updateFields.NEW_ENROLLMENTS_BOYS || 0;
-      const girls = updateFields.NEW_ENROLLMENTS_GIRLS || 0;
-      updateFields.NEW_ENROLLMENTS_TOTAL = boys + girls;
-    }
-
     //Define the fallback values for new rows
     //This way, new columns will match the old columns data format, but will not include the useless/unnecessary info
     //Also sets a unique ID
@@ -184,6 +177,90 @@ app.post("/api/submit-admissions", async (req, res) => {
   }
 })
 
+app.post("/api/submit-enrollment", async (req, res) => {
+  if(!client) {
+    return res.status(500).json({ message: "Failed to connect to DB" });
+  }
+  try {
+    //Set up initial collections/dbs
+    const benchmarkDb = client.db("Test-School-Benchmark")
+    const collection = benchmarkDb.collection("EnrollAttrition")
+
+    //Get the current user email
+    const usersCollection = benchmarkDb.collection("Users")
+    const userEmail = req.oidc.user?.email
+    if (!userEmail) {
+      return res.status(401).json({ message: "Unauthorized: No user email found" });
+    }
+
+    //Find the school the user belongs to
+    const userMapping = await usersCollection.findOne({ email: userEmail })
+    if (!userMapping || !userMapping.SCHOOL_ID) {
+      return res.status(403).json({ message: "Forbidden: User is not linked to a school" });
+    }
+    const schoolID = userMapping.SCHOOL_ID
+
+    //Get the school year and grade that we're entering data for
+    if (!req.body.SCHOOL_YR_ID || !req.body.GRADE_DEF_ID) {
+      return res.status(400).json({ message: "School Year and Grade Level are required." });
+    }
+
+    const schoolYearID = parseInt(req.body.SCHOOL_YR_ID, 10);
+    const gradeDefID = parseInt(req.body.GRADE_DEF_ID, 10);
+
+    console.log(`User ${userEmail} is submitting data for School ID: ${schoolID}`);
+
+    //Add keys to this if we're updating those fields
+    const updateFields: any = {};
+
+    //FOR ALL FIELDS, CONVERT TO NUMBER
+    if (req.body.STUDENTS_ADDED_DURING_YEAR !== undefined) {
+      updateFields.STUDENTS_ADDED_DURING_YEAR = parseInt(req.body.STUDENTS_ADDED_DURING_YEAR, 10) || 0;
+    }
+    if (req.body.STUDENTS_GRADUATED !== undefined) {
+      updateFields.STUDENTS_GRADUATED = parseInt(req.body.STUDENTS_GRADUATED, 10) || 0;
+    }
+    if (req.body.EXCH_STUD_REPS !== undefined) {
+      updateFields.EXCH_STUD_REPS = parseInt(req.body.EXCH_STUD_REPS, 10) || 0;
+    }
+    if (req.body.STUD_DISS_WTHD !== undefined) {
+      updateFields.STUD_DISS_WTHD = parseInt(req.body.STUD_DISS_WTHD, 10) || 0;
+    }
+    if (req.body.STUD_NOT_INV !== undefined) {
+      updateFields.STUD_NOT_INV = parseInt(req.body.STUD_NOT_INV, 10) || 0;
+    }
+    if (req.body.STUD_NOT_RETURN !== undefined) {
+      updateFields.STUD_NOT_RETURN = parseInt(req.body.STUD_NOT_RETURN, 10) || 0;
+    }
+
+    //Define the fallback values for new rows
+    //This way, new columns will match the old columns data format, but will not include the useless/unnecessary info
+    //Also sets a unique ID
+    const insertFields: any = {
+      ID: Date.now(),
+      LOCK_ID: 1,
+      UPDATE_USER_TX: null,
+      UPDATE_DT: null,
+    };
+
+    //For the exact school and year, update the fields we were given. Only modify existing entries, don't make new ones
+    const result = await collection.updateOne(
+        { SCHOOL_ID: schoolID, SCHOOL_YR_ID: schoolYearID, GRADE_DEF_ID: gradeDefID },
+        {
+          $set: updateFields,
+          $setOnInsert: insertFields
+        },
+        { upsert: true }
+    );
+
+    res.status(200).json({ message: "Successfully saved data", result });
+  }
+  catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+})
+
 app.get("/api/admissions-data", async (req, res) => {
   if(!client) return res.status(500).json({ message: "No DB connection" });
   try {
@@ -202,6 +279,38 @@ app.get("/api/admissions-data", async (req, res) => {
 
     //Look for the data
     const existingData = await benchmarkDb.collection("AdmissionActivity").findOne({
+      SCHOOL_ID: userMapping.SCHOOL_ID,
+      SCHOOL_YR_ID: yearId,
+      GRADE_DEF_ID: gradeId
+    });
+
+    //Send it back, or empty data if none exists
+    res.status(200).json(existingData || {});
+
+  } catch (error) {
+    console.error("Autofill error:", error);
+    res.status(500).json({ message: "Error fetching existing data" });
+  }
+});
+
+app.get("/api/enrollment-data", async (req, res) => {
+  if(!client) return res.status(500).json({ message: "No DB connection" });
+  try {
+    const benchmarkDb = client.db("Test-School-Benchmark");
+
+    //Get user's school
+    const userEmail = req.oidc?.user?.email;
+    const userMapping = await benchmarkDb.collection("Users").findOne({ email: userEmail });
+    if (!userMapping || !userMapping.SCHOOL_ID) return res.status(403).json({ message: "No school linked" });
+
+    //Get the requested year and grade from the URL query
+    const yearId = parseInt(req.query.yearId as string, 10);
+    const gradeId = parseInt(req.query.gradeId as string, 10);
+
+    if (!yearId || !gradeId) return res.status(400).json({ message: "Missing IDs" });
+
+    //Look for the data
+    const existingData = await benchmarkDb.collection("EnrollAttrition").findOne({
       SCHOOL_ID: userMapping.SCHOOL_ID,
       SCHOOL_YR_ID: yearId,
       GRADE_DEF_ID: gradeId
