@@ -9,8 +9,10 @@ export default function AdmissionsForm() {
         CAPACITY_ENROLL: "",
         COMPLETED_APPLICATION_TOTAL: "",
         ACCEPTANCES_TOTAL: "",
-        NEW_ENROLLMENTS_BOYS: "",
-        NEW_ENROLLMENTS_GIRLS: ""
+        NEW_ENROLLMENTS_TOTAL: "",
+        CONTRACTED_ENROLL_BOYS: "",
+        CONTRACTED_ENROLL_GIRLS: "",
+        CONTRACTED_ENROLL_NB: ""
     });
 
     const [schoolYears, setSchoolYears] = useState<any[]>([]);
@@ -69,8 +71,10 @@ export default function AdmissionsForm() {
                         CAPACITY_ENROLL: data.CAPACITY_ENROLL || "",
                         COMPLETED_APPLICATION_TOTAL: data.COMPLETED_APPLICATION_TOTAL || "",
                         ACCEPTANCES_TOTAL: data.ACCEPTANCES_TOTAL || "",
-                        NEW_ENROLLMENTS_BOYS: data.NEW_ENROLLMENTS_BOYS || "",
-                        NEW_ENROLLMENTS_GIRLS: data.NEW_ENROLLMENTS_GIRLS || "",
+                        NEW_ENROLLMENTS_TOTAL: data.NEW_ENROLLMENTS_TOTAL || "",
+                        CONTRACTED_ENROLL_BOYS: data.CONTRACTED_ENROLL_BOYS || "",
+                        CONTRACTED_ENROLL_GIRLS: data.CONTRACTED_ENROLL_GIRLS || "",
+                        CONTRACTED_ENROLL_NB: data.CONTRACTED_ENROLL_NB || "",
                     }));
                 })
                 .catch(err => console.error("Failed to fetch autofill data:", err));
@@ -179,7 +183,6 @@ export default function AdmissionsForm() {
                     name="COMPLETED_APPLICATION_TOTAL"
                     value={formData.COMPLETED_APPLICATION_TOTAL}
                     onChange={handleChange}
-                    required={true}
                 />
 
                 <TooltipInput
@@ -188,25 +191,38 @@ export default function AdmissionsForm() {
                     name="ACCEPTANCES_TOTAL"
                     value={formData.ACCEPTANCES_TOTAL}
                     onChange={handleChange}
-                    required={true}
                 />
 
                 <TooltipInput
-                    label="Total New Enrollments (Boys)"
-                    tooltipText="The total number of fully completed submitted applications."
-                    name="NEW_ENROLLMENTS_BOYS"
-                    value={formData.NEW_ENROLLMENTS_BOYS}
+                    label="Total New Enrollments"
+                    tooltipText="The total number of newly enrolled students."
+                    name="NEW_ENROLLMENTS_TOTAL"
+                    value={formData.NEW_ENROLLMENTS_TOTAL}
                     onChange={handleChange}
-                    required={true}
                 />
 
                 <TooltipInput
-                    label="Total New Enrollments (Girls)"
-                    tooltipText="The total number of newly enrolled girls for the year."
-                    name="NEW_ENROLLMENTS_GIRLS"
-                    value={formData.NEW_ENROLLMENTS_GIRLS}
+                    label="Contracted Enrollments (Boys)"
+                    tooltipText="The number of boys that have signed a contract and paid a deposit."
+                    name="CONTRACTED_ENROLL_BOYS"
+                    value={formData.CONTRACTED_ENROLL_BOYS}
                     onChange={handleChange}
-                    required={true}
+                />
+
+                <TooltipInput
+                    label="Contracted Enrollments (Girls)"
+                    tooltipText="The number of girls that have signed a contract and paid a deposit."
+                    name="CONTRACTED_ENROLL_GIRLS"
+                    value={formData.CONTRACTED_ENROLL_GIRLS}
+                    onChange={handleChange}
+                />
+
+                <TooltipInput
+                    label="Contracted Enrollments (Non-binary)"
+                    tooltipText="The number of non-binary students that have signed a contract and paid a deposit."
+                    name="CONTRACTED_ENROLL_NB"
+                    value={formData.CONTRACTED_ENROLL_NB}
+                    onChange={handleChange}
                 />
             </div>
 

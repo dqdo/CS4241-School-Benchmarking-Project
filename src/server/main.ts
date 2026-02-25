@@ -125,25 +125,56 @@ app.post("/api/submit-admissions", async (req, res) => {
     if (req.body.ACCEPTANCES_TOTAL !== undefined) {
       updateFields.ACCEPTANCES_TOTAL = parseInt(req.body.ACCEPTANCES_TOTAL, 10) || 0;
     }
-    if (req.body.NEW_ENROLLMENTS_BOYS !== undefined) {
-      updateFields.NEW_ENROLLMENTS_BOYS = parseInt(req.body.NEW_ENROLLMENTS_BOYS, 10) || 0;
+    if (req.body.NEW_ENROLLMENTS_TOTAL !== undefined) {
+      updateFields.NEW_ENROLLMENTS_TOTAL = parseInt(req.body.NEW_ENROLLMENTS_TOTAL, 10) || 0;
     }
-    if (req.body.NEW_ENROLLMENTS_GIRLS !== undefined) {
-      updateFields.NEW_ENROLLMENTS_GIRLS = parseInt(req.body.NEW_ENROLLMENTS_GIRLS, 10) || 0;
+    if (req.body.CONTRACTED_ENROLL_BOYS !== undefined) {
+      updateFields.CONTRACTED_ENROLL_BOYS = parseInt(req.body.CONTRACTED_ENROLL_BOYS, 10) || 0;
     }
+    if (req.body.CONTRACTED_ENROLL_GIRLS !== undefined) {
+      updateFields.CONTRACTED_ENROLL_GIRLS = parseInt(req.body.CONTRACTED_ENROLL_GIRLS, 10) || 0;
+    }
+    if (req.body.CONTRACTED_ENROLL_NB !== undefined) {
+      updateFields.CONTRACTED_ENROLL_NB = parseInt(req.body.CONTRACTED_ENROLL_NB, 10) || 0;
+    }
+
+    //Calculate total enrollments if the value exists
+    if (updateFields.NEW_ENROLLMENTS_BOYS !== undefined || updateFields.NEW_ENROLLMENTS_GIRLS !== undefined) {
+      const boys = updateFields.NEW_ENROLLMENTS_BOYS || 0;
+      const girls = updateFields.NEW_ENROLLMENTS_GIRLS || 0;
+      updateFields.NEW_ENROLLMENTS_TOTAL = boys + girls;
+    }
+
+    //Define the fallback values for new rows
+    const insertFields: any = {
+      ID: Date.now(),
+      LOCK_ID: 1,
+
+      COMPLETED_APPLICATION_BOYS: null,
+      COMPLETED_APPLICATION_GIRLS: null,
+      COMPLETED_APPLICATION_NB: null,
+
+      ACCEPTANCES_BOYS: null,
+      ACCEPTANCES_GIRLS: null,
+      ACCEPTANCES_NB: null,
+
+      NEW_ENROLLMENTS_BOYS: null,
+      NEW_ENROLLMENTS_GIRLS: null,
+      NEW_ENROLLMENTS_NB: null,
+
+      INQUIRIES_BOYS: null,
+      INQUIRIES_GIRLS: null
+    };
 
     //For the exact school and year, update the fields we were given. Only modify existing entries, don't make new oness
     const result = await collection.updateOne(
         { SCHOOL_ID: schoolID, SCHOOL_YR_ID: schoolYearID, GRADE_DEF_ID: gradeDefID },
-        { $set: updateFields }
+        {
+          $set: updateFields,
+          $setOnInsert: insertFields
+        },
+        { upsert: true }
     );
-
-    //If we didn't update something, then say it failed
-    if (result.matchedCount === 0) {
-      return res.status(404).json({
-        message: "No existing record found for this Grade and Year combination. Cannot update."
-      });
-    }
 
     res.status(200).json({ message: "Successfully saved data", result });
   }
