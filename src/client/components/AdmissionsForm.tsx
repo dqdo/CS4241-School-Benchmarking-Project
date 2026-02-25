@@ -186,18 +186,18 @@ export default function AdmissionsForm() {
                 />
 
                 <TooltipInput
-                    label="Total Acceptances"
-                    tooltipText="The total number of accepted students."
-                    name="ACCEPTANCES_TOTAL"
-                    value={formData.ACCEPTANCES_TOTAL}
-                    onChange={handleChange}
-                />
-
-                <TooltipInput
                     label="Total New Enrollments"
                     tooltipText="The total number of newly enrolled students."
                     name="NEW_ENROLLMENTS_TOTAL"
                     value={formData.NEW_ENROLLMENTS_TOTAL}
+                    onChange={handleChange}
+                />
+
+                <TooltipInput
+                    label="Total Acceptances"
+                    tooltipText="The total number of accepted students."
+                    name="ACCEPTANCES_TOTAL"
+                    value={formData.ACCEPTANCES_TOTAL}
                     onChange={handleChange}
                 />
 

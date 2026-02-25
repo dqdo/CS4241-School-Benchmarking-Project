@@ -146,27 +146,27 @@ app.post("/api/submit-admissions", async (req, res) => {
     }
 
     //Define the fallback values for new rows
+    //This way, new columns will match the old columns data format, but will not include the useless/unnecessary info
+    //Also sets a unique ID
     const insertFields: any = {
       ID: Date.now(),
       LOCK_ID: 1,
-
+      UPDATE_USER_TX: null,
+      UPDATE_DT: null,
       COMPLETED_APPLICATION_BOYS: null,
       COMPLETED_APPLICATION_GIRLS: null,
       COMPLETED_APPLICATION_NB: null,
-
-      ACCEPTANCES_BOYS: null,
-      ACCEPTANCES_GIRLS: null,
-      ACCEPTANCES_NB: null,
-
       NEW_ENROLLMENTS_BOYS: null,
       NEW_ENROLLMENTS_GIRLS: null,
       NEW_ENROLLMENTS_NB: null,
-
+      ACCEPTANCES_BOYS: null,
+      ACCEPTANCES_GIRLS: null,
+      ACCEPTANCES_NB: null,
       INQUIRIES_BOYS: null,
       INQUIRIES_GIRLS: null
     };
 
-    //For the exact school and year, update the fields we were given. Only modify existing entries, don't make new oness
+    //For the exact school and year, update the fields we were given. Only modify existing entries, don't make new ones
     const result = await collection.updateOne(
         { SCHOOL_ID: schoolID, SCHOOL_YR_ID: schoolYearID, GRADE_DEF_ID: gradeDefID },
         {
