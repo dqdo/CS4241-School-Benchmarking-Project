@@ -153,28 +153,47 @@ app.post("/api/submit-admissions", async (req, res) => {
   }
 })
 
-app.get("/api/available-years", async (req, res) => {
+app.get("/api/admissions-data", async (req, res) => {
   if(!client) return res.status(500).json({ message: "No DB connection" });
-
   try {
     const benchmarkDb = client.db("Test-School-Benchmark");
 
-    //Get the user and the school ID
+    //Get user's school
     const userEmail = req.oidc?.user?.email;
     const userMapping = await benchmarkDb.collection("Users").findOne({ email: userEmail });
     if (!userMapping || !userMapping.SCHOOL_ID) return res.status(403).json({ message: "No school linked" });
-    const schoolID = userMapping.SCHOOL_ID;
 
-    //Figure out which year IDs have admissions entries for this school
-    const activeYearIds = await benchmarkDb.collection("AdmissionActivity").distinct("SCHOOL_YR_ID", { SCHOOL_ID: schoolID });
-    const years = await benchmarkDb.collection("SchoolYear")
-        .find({ ID: { $in: activeYearIds } })
-        .sort({ ID: -1 })
-        .toArray();
+    //Get the requested year and grade from the URL query
+    const yearId = parseInt(req.query.yearId as string, 10);
+    const gradeId = parseInt(req.query.gradeId as string, 10);
 
+    if (!yearId || !gradeId) return res.status(400).json({ message: "Missing IDs" });
+
+    //Look for the data
+    const existingData = await benchmarkDb.collection("AdmissionActivity").findOne({
+      SCHOOL_ID: userMapping.SCHOOL_ID,
+      SCHOOL_YR_ID: yearId,
+      GRADE_DEF_ID: gradeId
+    });
+
+    //Send it back, or empty data if none exists
+    res.status(200).json(existingData || {});
+
+  } catch (error) {
+    console.error("Autofill error:", error);
+    res.status(500).json({ message: "Error fetching existing data" });
+  }
+});
+
+app.get("/api/available-years", async (req, res) => {
+  if(!client) return res.status(500).json({ message: "No DB connection" });
+  try {
+    const benchmarkDb = client.db("Test-School-Benchmark");
+    //Fetch all years so the user can pick the current one to add new data
+    const years = await benchmarkDb.collection("SchoolYear").find({}).sort({ ID: -1 }).toArray();
     res.status(200).json(years);
   } catch (error) {
-    console.error("CRASH IN /api/available-years:", error);
+    console.error(error);
     res.status(500).json({ message: "Error fetching years" });
   }
 });
@@ -183,29 +202,11 @@ app.get("/api/available-grades", async (req, res) => {
   if(!client) return res.status(500).json({ message: "No DB connection" });
   try {
     const benchmarkDb = client.db("Test-School-Benchmark");
-
-    const userEmail = req.oidc?.user?.email;
-    const userMapping = await benchmarkDb.collection("Users").findOne({ email: userEmail });
-    if (!userMapping || !userMapping.SCHOOL_ID) return res.status(403).json({ message: "No school linked" });
-    const schoolID = userMapping.SCHOOL_ID;
-
-    const selectedYearId = parseInt(req.query.yearId as string, 10);
-    if (!selectedYearId) return res.status(400).json({ message: "Year ID required" });
-
-    //Based on the year we selected, figure out which grade IDs have entries for this year
-    const activeGradeIds = await benchmarkDb.collection("AdmissionActivity").distinct("GRADE_DEF_ID", {
-      SCHOOL_ID: schoolID,
-      SCHOOL_YR_ID: selectedYearId
-    });
-
-    const grades = await benchmarkDb.collection("GradeDefinitions")
-        .find({ ID: { $in: activeGradeIds } })
-        .sort({ ORDER_NO: 1 })
-        .toArray();
-
+    // Fetch all standard grades
+    const grades = await benchmarkDb.collection("GradeDefinitions").find({}).sort({ ORDER_NO: 1 }).toArray();
     res.status(200).json(grades);
   } catch (error) {
-    console.error("CRASH IN /api/available-grades:", error);
+    console.error(error);
     res.status(500).json({ message: "Error fetching grades" });
   }
 });

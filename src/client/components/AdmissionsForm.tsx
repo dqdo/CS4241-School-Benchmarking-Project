@@ -55,6 +55,28 @@ export default function AdmissionsForm() {
             });
     }, [formData.SCHOOL_YR_ID]);
 
+    //If you've selected both, get the autofill data
+    useEffect(() => {
+        //Only run if both dropdowns have a selection
+        if (formData.SCHOOL_YR_ID && formData.GRADE_DEF_ID) {
+
+            fetch(`/api/admissions-data?yearId=${formData.SCHOOL_YR_ID}&gradeId=${formData.GRADE_DEF_ID}`)
+                .then(res => res.json())
+                .then(data => {
+                    //Update the form with the database numbers, or reset to blanks if it's a new year
+                    setFormData(prev => ({
+                        ...prev,
+                        CAPACITY_ENROLL: data.CAPACITY_ENROLL || "",
+                        COMPLETED_APPLICATION_TOTAL: data.COMPLETED_APPLICATION_TOTAL || "",
+                        ACCEPTANCES_TOTAL: data.ACCEPTANCES_TOTAL || "",
+                        NEW_ENROLLMENTS_BOYS: data.NEW_ENROLLMENTS_BOYS || "",
+                        NEW_ENROLLMENTS_GIRLS: data.NEW_ENROLLMENTS_GIRLS || "",
+                    }));
+                })
+                .catch(err => console.error("Failed to fetch autofill data:", err));
+        }
+    }, [formData.SCHOOL_YR_ID, formData.GRADE_DEF_ID]); //Re-run when either dropdown changes
+
     //Generic handler for all inputs
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const {name, value} = e.target;
