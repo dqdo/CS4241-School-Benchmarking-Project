@@ -87,17 +87,30 @@ export default function ChatWindow() {
                         <span className="text-white text-sm font-semibold tracking-wide">
                             AI Assistant
                         </span>
-                        <button
-                            onClick={toggleExpand}
-                            aria-label={isExpanded ? "Shrink chat" : "Expand chat"}
-                            className="flex items-center justify-center p-1 opacity-80 hover:opacity-100 transition-opacity cursor-pointer bg-transparent border-none"
-                        >
-                            {isExpanded ? (
-                                <img src={CollapseIcon} alt="Collapse" width={16} height={16} />
-                            ) : (
-                                <img src={ExpandIcon} alt="Expand" width={16} height={16} />
+                        <div className="flex items-center gap-2">
+                            {messages.length > 0 && (
+                                <button
+                                    onClick={() => setMessages([])}
+                                    disabled={isLoading}
+                                    aria-label="Clear chat history"
+                                    title="Clear chat"
+                                    className="flex items-center justify-center px-2 py-0.5 rounded text-xs text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer bg-transparent border border-white/20 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-white/70"
+                                >
+                                    Clear
+                                </button>
                             )}
-                        </button>
+                            <button
+                                onClick={toggleExpand}
+                                aria-label={isExpanded ? "Shrink chat" : "Expand chat"}
+                                className="flex items-center justify-center p-1 opacity-80 hover:opacity-100 transition-opacity cursor-pointer bg-transparent border-none"
+                            >
+                                {isExpanded ? (
+                                    <img src={CollapseIcon} alt="Collapse" width={16} height={16} />
+                                ) : (
+                                    <img src={ExpandIcon} alt="Expand" width={16} height={16} />
+                                )}
+                            </button>
+                        </div>
                     </div>
 
                     <div className="flex-1 p-3 overflow-y-auto space-y-2 bg-white">
