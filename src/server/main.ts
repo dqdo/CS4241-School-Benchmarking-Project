@@ -80,63 +80,42 @@ app.get("/loggedIn", (req, res) => {
 })
 
 app.post("/api/submit-admissions", async (req, res) => {
-  if(!client) {
-    return res.status(500).json({ message: "Failed to connect to DB" });
-  }
+  if(!client) { return res.status(500).json({ message: "Failed to connect to DB" }); }
   try {
     //Set up initial collections/dbs
     const benchmarkDb = client.db("Test-School-Benchmark")
-    const collection = benchmarkDb.collection("AdmissionActivity")
 
     //Get the current user email
-    const usersCollection = benchmarkDb.collection("Users")
     const userEmail = req.oidc.user?.email
     if (!userEmail) {
-      return res.status(401).json({ message: "Unauthorized: No user email found" });
+      return res.status(401).json({message: "Unauthorized: No user email found"});
     }
 
     //Find the school the user belongs to
-    const userMapping = await usersCollection.findOne({ email: userEmail })
+    const userMapping = await benchmarkDb.collection("Users").findOne({email: userEmail})
     if (!userMapping || !userMapping.SCHOOL_ID) {
-      return res.status(403).json({ message: "Forbidden: User is not linked to a school" });
+      return res.status(403).json({message: "Forbidden: User is not linked to a school"});
     }
-    const schoolID = userMapping.SCHOOL_ID
 
-    //Get the school year and grade that we're entering data for
+    //Verify school year and grade exist
     if (!req.body.SCHOOL_YR_ID || !req.body.GRADE_DEF_ID) {
-      return res.status(400).json({ message: "School Year and Grade Level are required." });
+      return res.status(400).json({message: "School Year and Grade Level are required."});
     }
 
+    const schoolID = userMapping.SCHOOL_ID
     const schoolYearID = parseInt(req.body.SCHOOL_YR_ID, 10);
     const gradeDefID = parseInt(req.body.GRADE_DEF_ID, 10);
 
-    console.log(`User ${userEmail} is submitting data for School ID: ${schoolID}`);
+    //Set up the db fields to update
+    const baseFields = [
+      "CAPACITY_ENROLL", "COMPLETED_APPLICATION_TOTAL", "NEW_ENROLLMENTS_TOTAL", "ACCEPTANCES_TOTAL", "CONTRACTED_ENROLL_BOYS",
+      "CONTRACTED_ENROLL_GIRLS", "CONTRACTED_ENROLL_NB"
+    ];
+    const socFields = baseFields.map(field => field + '_SOC')
 
-    //Add keys to this if we're updating those fields
-    const updateFields: any = {};
-
-    //FOR ALL FIELDS, CONVERT TO NUMBER
-    if (req.body.CAPACITY_ENROLL !== undefined) {
-      updateFields.CAPACITY_ENROLL = parseInt(req.body.CAPACITY_ENROLL, 10) || 0;
-    }
-    if (req.body.COMPLETED_APPLICATION_TOTAL !== undefined) {
-      updateFields.COMPLETED_APPLICATION_TOTAL = parseInt(req.body.COMPLETED_APPLICATION_TOTAL, 10) || 0;
-    }
-    if (req.body.ACCEPTANCES_TOTAL !== undefined) {
-      updateFields.ACCEPTANCES_TOTAL = parseInt(req.body.ACCEPTANCES_TOTAL, 10) || 0;
-    }
-    if (req.body.NEW_ENROLLMENTS_TOTAL !== undefined) {
-      updateFields.NEW_ENROLLMENTS_TOTAL = parseInt(req.body.NEW_ENROLLMENTS_TOTAL, 10) || 0;
-    }
-    if (req.body.CONTRACTED_ENROLL_BOYS !== undefined) {
-      updateFields.CONTRACTED_ENROLL_BOYS = parseInt(req.body.CONTRACTED_ENROLL_BOYS, 10) || 0;
-    }
-    if (req.body.CONTRACTED_ENROLL_GIRLS !== undefined) {
-      updateFields.CONTRACTED_ENROLL_GIRLS = parseInt(req.body.CONTRACTED_ENROLL_GIRLS, 10) || 0;
-    }
-    if (req.body.CONTRACTED_ENROLL_NB !== undefined) {
-      updateFields.CONTRACTED_ENROLL_NB = parseInt(req.body.CONTRACTED_ENROLL_NB, 10) || 0;
-    }
+    //Any fields we are updating, add to the variable, also make sure they are valid numbers
+    const updateFields = parseNumericFields(req.body, baseFields);
+    const updateFieldsSOC = parseNumericFields(req.body, socFields);
 
     //Define the fallback values for new rows
     //This way, new columns will match the old columns data format, but will not include the useless/unnecessary info
@@ -159,17 +138,27 @@ app.post("/api/submit-admissions", async (req, res) => {
       INQUIRIES_GIRLS: null
     };
 
-    //For the exact school and year, update the fields we were given. Only modify existing entries, don't make new ones
-    const result = await collection.updateOne(
-        { SCHOOL_ID: schoolID, SCHOOL_YR_ID: schoolYearID, GRADE_DEF_ID: gradeDefID },
-        {
-          $set: updateFields,
-          $setOnInsert: insertFields
-        },
-        { upsert: true }
-    );
-
-    res.status(200).json({ message: "Successfully saved data", result });
+    //For the exact school and year, update the fields we were given
+    await Promise.all([
+      benchmarkDb.collection("AdmissionActivity").updateOne(
+          {SCHOOL_ID: schoolID, SCHOOL_YR_ID: schoolYearID, GRADE_DEF_ID: gradeDefID},
+          {$set: updateFields, $setOnInsert: insertFields},
+          {upsert: true}
+      ),
+      benchmarkDb.collection("AdmissionActivitySOC").updateOne(
+          {SCHOOL_ID: schoolID, SCHOOL_YR_ID: schoolYearID, GRADE_DEF_ID: gradeDefID},
+          //Map the SOC names back to the default names that they use in the actual db tables
+          {
+            $set: Object.fromEntries(
+                Object.entries(updateFieldsSOC).map(([k, v]) => [k.replace('_SOC', ''), v])
+            ),
+            //Give SOC a unique ID too, different from the other entry
+            $setOnInsert: {...insertFields, ID: Date.now() + 1}
+          },
+          {upsert: true}
+      )
+    ]);
+    res.status(200).json({message: "Successfully saved Standard and SOC data"});
   }
   catch (error) {
     console.error(error);
@@ -178,60 +167,42 @@ app.post("/api/submit-admissions", async (req, res) => {
 })
 
 app.post("/api/submit-enrollment", async (req, res) => {
-  if(!client) {
-    return res.status(500).json({ message: "Failed to connect to DB" });
-  }
+  if(!client) { return res.status(500).json({ message: "Failed to connect to DB" }); }
   try {
     //Set up initial collections/dbs
     const benchmarkDb = client.db("Test-School-Benchmark")
-    const collection = benchmarkDb.collection("EnrollAttrition")
 
     //Get the current user email
-    const usersCollection = benchmarkDb.collection("Users")
     const userEmail = req.oidc.user?.email
     if (!userEmail) {
-      return res.status(401).json({ message: "Unauthorized: No user email found" });
+      return res.status(401).json({message: "Unauthorized: No user email found"});
     }
 
     //Find the school the user belongs to
-    const userMapping = await usersCollection.findOne({ email: userEmail })
+    const userMapping = await benchmarkDb.collection("Users").findOne({email: userEmail})
     if (!userMapping || !userMapping.SCHOOL_ID) {
-      return res.status(403).json({ message: "Forbidden: User is not linked to a school" });
+      return res.status(403).json({message: "Forbidden: User is not linked to a school"});
     }
-    const schoolID = userMapping.SCHOOL_ID
 
-    //Get the school year and grade that we're entering data for
+    //Verify school year and grade exist
     if (!req.body.SCHOOL_YR_ID || !req.body.GRADE_DEF_ID) {
-      return res.status(400).json({ message: "School Year and Grade Level are required." });
+      return res.status(400).json({message: "School Year and Grade Level are required."});
     }
 
+    const schoolID = userMapping.SCHOOL_ID
     const schoolYearID = parseInt(req.body.SCHOOL_YR_ID, 10);
     const gradeDefID = parseInt(req.body.GRADE_DEF_ID, 10);
 
-    console.log(`User ${userEmail} is submitting data for School ID: ${schoolID}`);
+    //Set up the db fields to update
+    const baseFields = [
+      "STUDENTS_ADDED_DURING_YEAR", "STUDENTS_GRADUATED", "EXCH_STUD_REPS",
+      "STUD_DISS_WTHD", "STUD_NOT_INV", "STUD_NOT_RETURN"
+    ];
+    const socFields = baseFields.map(field => field + '_SOC')
 
-    //Add keys to this if we're updating those fields
-    const updateFields: any = {};
-
-    //FOR ALL FIELDS, CONVERT TO NUMBER
-    if (req.body.STUDENTS_ADDED_DURING_YEAR !== undefined) {
-      updateFields.STUDENTS_ADDED_DURING_YEAR = parseInt(req.body.STUDENTS_ADDED_DURING_YEAR, 10) || 0;
-    }
-    if (req.body.STUDENTS_GRADUATED !== undefined) {
-      updateFields.STUDENTS_GRADUATED = parseInt(req.body.STUDENTS_GRADUATED, 10) || 0;
-    }
-    if (req.body.EXCH_STUD_REPS !== undefined) {
-      updateFields.EXCH_STUD_REPS = parseInt(req.body.EXCH_STUD_REPS, 10) || 0;
-    }
-    if (req.body.STUD_DISS_WTHD !== undefined) {
-      updateFields.STUD_DISS_WTHD = parseInt(req.body.STUD_DISS_WTHD, 10) || 0;
-    }
-    if (req.body.STUD_NOT_INV !== undefined) {
-      updateFields.STUD_NOT_INV = parseInt(req.body.STUD_NOT_INV, 10) || 0;
-    }
-    if (req.body.STUD_NOT_RETURN !== undefined) {
-      updateFields.STUD_NOT_RETURN = parseInt(req.body.STUD_NOT_RETURN, 10) || 0;
-    }
+    //Any fields we are updating, add to the variable, also make sure they are valid numbers
+    const updateFields = parseNumericFields(req.body, baseFields);
+    const updateFieldsSOC = parseNumericFields(req.body, socFields);
 
     //Define the fallback values for new rows
     //This way, new columns will match the old columns data format, but will not include the useless/unnecessary info
@@ -243,23 +214,48 @@ app.post("/api/submit-enrollment", async (req, res) => {
       UPDATE_DT: null,
     };
 
-    //For the exact school and year, update the fields we were given. Only modify existing entries, don't make new ones
-    const result = await collection.updateOne(
-        { SCHOOL_ID: schoolID, SCHOOL_YR_ID: schoolYearID, GRADE_DEF_ID: gradeDefID },
-        {
-          $set: updateFields,
-          $setOnInsert: insertFields
-        },
-        { upsert: true }
-    );
-
-    res.status(200).json({ message: "Successfully saved data", result });
+    //For the exact school and year, update the fields we were given
+    await Promise.all([
+      benchmarkDb.collection("EnrollAttrition").updateOne(
+          {SCHOOL_ID: schoolID, SCHOOL_YR_ID: schoolYearID, GRADE_DEF_ID: gradeDefID},
+          {$set: updateFields, $setOnInsert: insertFields},
+          {upsert: true}
+      ),
+      benchmarkDb.collection("EnrollAttritionSOC").updateOne(
+          {SCHOOL_ID: schoolID, SCHOOL_YR_ID: schoolYearID, GRADE_DEF_ID: gradeDefID},
+          //Map the SOC names back to the default names that they use in the actual db tables
+          {
+            $set: Object.fromEntries(
+                Object.entries(updateFieldsSOC).map(([k, v]) => [k.replace('_SOC', ''), v])
+            ),
+            //Give SOC a unique ID too, different from the other entry
+            $setOnInsert: {...insertFields, ID: Date.now() + 1}
+          },
+          {upsert: true}
+      )
+    ]);
+    res.status(200).json({message: "Successfully saved Standard and SOC data"});
   }
   catch (error) {
     console.error(error);
     res.status(500).json({ message: "Internal server error" });
   }
 })
+
+function parseNumericFields(body: any, fields: string[]){
+  const result: any = {};
+  fields.forEach(field => {
+    //Only parse it if it actually exists in the request
+    if (body[field] !== undefined && body[field] !== "") {
+      const parsed = parseInt(body[field], 10);
+      if (isNaN(parsed)) {
+        throw new Error(`Invalid number format for field: ${field}`);
+      }
+      result[field] = parsed;
+    }
+  });
+  return result;
+};
 
 app.get("/api/admissions-data", async (req, res) => {
   if(!client) return res.status(500).json({ message: "No DB connection" });
@@ -274,18 +270,28 @@ app.get("/api/admissions-data", async (req, res) => {
     //Get the requested year and grade from the URL query
     const yearId = parseInt(req.query.yearId as string, 10);
     const gradeId = parseInt(req.query.gradeId as string, 10);
-
     if (!yearId || !gradeId) return res.status(400).json({ message: "Missing IDs" });
 
-    //Look for the data
-    const existingData = await benchmarkDb.collection("AdmissionActivity").findOne({
-      SCHOOL_ID: userMapping.SCHOOL_ID,
-      SCHOOL_YR_ID: yearId,
-      GRADE_DEF_ID: gradeId
-    });
+    //Get the data for standard and SOC data
+    const filterQuery = { SCHOOL_ID: userMapping.SCHOOL_ID, SCHOOL_YR_ID: yearId, GRADE_DEF_ID: gradeId };
+    const [standardData, socData] = await Promise.all([
+      benchmarkDb.collection("AdmissionActivity").findOne(filterQuery),
+      benchmarkDb.collection("AdmissionActivitySOC").findOne(filterQuery)
+    ]);
+    //Add standardData to the combined data
+    const combinedData: any = { ...(standardData || {}) };
+    //If there's an SOC entry, add that too
+    if (socData) {
+      Object.keys(socData).forEach(key => {
+        //Add _SOC to the data fields needed for the forms, but not for the other elements
+        if (!["_id", "ID", "SCHOOL_ID", "SCHOOL_YR_ID", "GRADE_DEF_ID", "LOCK_ID", "UPDATE_USER_TX", "UPDATE_DT"].includes(key)) {
+          combinedData[`${key}_SOC`] = socData[key];
+        }
+      });
+    }
 
-    //Send it back, or empty data if none exists
-    res.status(200).json(existingData || {});
+    //Send it back to autofill
+    res.status(200).json(combinedData);
 
   } catch (error) {
     console.error("Autofill error:", error);
@@ -306,18 +312,28 @@ app.get("/api/enrollment-data", async (req, res) => {
     //Get the requested year and grade from the URL query
     const yearId = parseInt(req.query.yearId as string, 10);
     const gradeId = parseInt(req.query.gradeId as string, 10);
-
     if (!yearId || !gradeId) return res.status(400).json({ message: "Missing IDs" });
 
-    //Look for the data
-    const existingData = await benchmarkDb.collection("EnrollAttrition").findOne({
-      SCHOOL_ID: userMapping.SCHOOL_ID,
-      SCHOOL_YR_ID: yearId,
-      GRADE_DEF_ID: gradeId
-    });
+    //Get the data for standard and SOC data
+    const filterQuery = { SCHOOL_ID: userMapping.SCHOOL_ID, SCHOOL_YR_ID: yearId, GRADE_DEF_ID: gradeId };
+    const [standardData, socData] = await Promise.all([
+      benchmarkDb.collection("EnrollAttrition").findOne(filterQuery),
+      benchmarkDb.collection("EnrollAttritionSOC").findOne(filterQuery)
+    ]);
+    //Add standardData to the combined data
+    const combinedData: any = { ...(standardData || {}) };
+    //If there's an SOC entry, add that too
+    if (socData) {
+      Object.keys(socData).forEach(key => {
+        //Add _SOC to the data fields needed for the forms, but not for the other elements
+        if (!["_id", "ID", "SCHOOL_ID", "SCHOOL_YR_ID", "GRADE_DEF_ID", "LOCK_ID", "UPDATE_USER_TX", "UPDATE_DT"].includes(key)) {
+          combinedData[`${key}_SOC`] = socData[key];
+        }
+      });
+    }
 
-    //Send it back, or empty data if none exists
-    res.status(200).json(existingData || {});
+    //Send it back to autofill
+    res.status(200).json(combinedData || {});
 
   } catch (error) {
     console.error("Autofill error:", error);
