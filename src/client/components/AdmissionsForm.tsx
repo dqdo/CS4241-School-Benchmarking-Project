@@ -164,8 +164,8 @@ export default function AdmissionsForm() {
             />
 
             {FORM_SECTIONS.map((section, sectionIndex) => (
-                <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                    <div key={sectionIndex} className="space-y-4 pt-4">
+                <div key={sectionIndex} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="space-y-4 pt-4">
 
                         {/* Section title and description */}
                         <div className={"px-4"} >
