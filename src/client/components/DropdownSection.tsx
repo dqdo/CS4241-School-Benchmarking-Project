@@ -1,13 +1,15 @@
 interface DropdownSectionProps {
     schoolYears: any[];
     grades: any[];
-    formData: { SCHOOL_YR_ID: string; GRADE_DEF_ID: string };
+    formData: { SCHOOL_YR_ID: string; GRADE_DEF_ID?: string };
     onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+    showGrade?: boolean;
 }
 
-export function DropdownSection({ schoolYears, grades, formData, onChange }: DropdownSectionProps) {
+export function DropdownSection({ schoolYears, grades, formData, onChange, showGrade = true }: DropdownSectionProps) {
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+        <div className={`grid grid-cols-1 ${showGrade ? 'md:grid-cols-2' : ''} gap-6 mb-8 p-4 bg-gray-50 border border-gray-200 rounded-lg`}>
+            {/* School Year Dropdown */}
             <div className="flex flex-col">
                 <label className="font-semibold text-sm mb-1 text-[#1E3869]">School Year</label>
                 <select
@@ -24,21 +26,24 @@ export function DropdownSection({ schoolYears, grades, formData, onChange }: Dro
                 </select>
             </div>
 
-            <div className="flex flex-col">
-                <label className="font-semibold text-sm mb-1 text-[#1E3869]">Grade Level</label>
-                <select
-                    name="GRADE_DEF_ID"
-                    value={formData.GRADE_DEF_ID}
-                    onChange={onChange}
-                    className="border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-[#0693E3] bg-white cursor-pointer"
-                    required
-                >
-                    <option value="" disabled>Select a grade...</option>
-                    {grades.map((grade) => (
-                        <option key={grade.ID} value={grade.ID}>{grade.NAME_TX}</option>
-                    ))}
-                </select>
-            </div>
+            {/* Conditionally render Grade Level Dropdown */}
+            {showGrade && (
+                <div className="flex flex-col">
+                    <label className="font-semibold text-sm mb-1 text-[#1E3869]">Grade Level</label>
+                    <select
+                        name="GRADE_DEF_ID"
+                        value={formData.GRADE_DEF_ID || ""}
+                        onChange={onChange}
+                        className="border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-[#0693E3] bg-white cursor-pointer"
+                        required
+                    >
+                        <option value="" disabled>Select a grade...</option>
+                        {grades.map((grade) => (
+                            <option key={grade.ID} value={grade.ID}>{grade.NAME_TX}</option>
+                        ))}
+                    </select>
+                </div>
+            )}
         </div>
     );
 }

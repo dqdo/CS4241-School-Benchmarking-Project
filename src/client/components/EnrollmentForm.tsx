@@ -51,7 +51,7 @@ export default function EnrollmentForm() {
                     setFormData(prev => ({
                         ...prev,
                         ...Object.fromEntries(
-                            ALL_FIELDS.map(field => [field.name, data[field.name] || ""])
+                            ALL_FIELDS.map(field => [field.name, data[field.name] ?? ""])
                         )
                     }));
                 }

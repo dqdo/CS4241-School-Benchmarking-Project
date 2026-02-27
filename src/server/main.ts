@@ -4,6 +4,7 @@ import * as dotenv from "dotenv"
 import {Db, MongoClient, ServerApiVersion} from "mongodb";
 import {auth} from "express-openid-connect"
 import {requireAdmin, requireAuth} from "../middleware/auth.js";
+// @ts-ignore
 import chatbot from "./chatbot-ai.ts";
 
 const app = express();
@@ -423,6 +424,93 @@ app.get("/api/get-draft", async (req, res) => {
   catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error getting draft data" });
+  }
+});
+
+app.post("/api/submit-employee", async (req, res) => {
+  if(!client) { return res.status(500).json({ message: "Failed to connect to DB" }); }
+  try {
+    const benchmarkDb = client.db("Test-School-Benchmark");
+    const userEmail = req.oidc.user?.email;
+
+    if (!userEmail) return res.status(401).json({message: "Unauthorized: No user email found"});
+
+    const userMapping = await benchmarkDb.collection("Users").findOne({email: userEmail});
+    if (!userMapping || !userMapping.SCHOOL_ID) {
+      return res.status(403).json({message: "Forbidden: User is not linked to a school"});
+    }
+
+    if (!req.body.SCHOOL_YR_ID) {
+      return res.status(400).json({message: "School Year is required."});
+    }
+
+    const schoolID = userMapping.SCHOOL_ID;
+    const schoolYearID = parseInt(req.body.SCHOOL_YR_ID, 10);
+
+    const personnelFields = ["TOTAL_EMPLOYEES", "FT_EMPLOYEES", "POC_EMPLOYEES", "SUBCONTRACT_NUM", "SUBCONTRACT_FTE", "FTE_ONLY_NUM"];
+    const adminFields = ["NR_EXEMPT", "NR_NONEXEMPT", "FTE_EXEMPT", "FTE_NONEXEMPT"];
+
+    const updatePersonnel = parseNumericFields(req.body, personnelFields);
+    const updateAdmin = parseNumericFields(req.body, adminFields);
+
+    const insertFields: any = {
+      ID: Date.now(),
+      LOCK_ID: 1,
+      UPDATE_USER_TX: null,
+      UPDATE_DT: null,
+    };
+
+    await Promise.all([
+      benchmarkDb.collection("EmployeePersonnel").updateOne(
+          { SCHOOL_ID: schoolID, SCHOOL_YR_ID: schoolYearID },
+          {
+            $set: { ...updatePersonnel, EMP_CAT_CD: 'ALL' },
+            $setOnInsert: insertFields
+          },
+          { upsert: true }
+      ),
+      benchmarkDb.collection("EmployeeAdminSupport").updateOne(
+          { SCHOOL_ID: schoolID, SCHOOL_YR_ID: schoolYearID },
+          {
+            $set: { ...updateAdmin, ADMIN_STAFF_FUNC_CD: 'ALL' },
+            $setOnInsert: { ...insertFields, ID: Date.now() + 1 }
+          },
+          { upsert: true }
+      )
+    ]);
+    res.status(200).json({message: "Successfully saved Employee data"});
+  }
+  catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.get("/api/employee-data", async (req, res) => {
+  if(!client) return res.status(500).json({ message: "No DB connection" });
+  try {
+    const benchmarkDb = client.db("Test-School-Benchmark");
+
+    const userEmail = req.oidc?.user?.email;
+    const userMapping = await benchmarkDb.collection("Users").findOne({ email: userEmail });
+    if (!userMapping || !userMapping.SCHOOL_ID) return res.status(403).json({ message: "No school linked" });
+
+    const yearId = parseInt(req.query.yearId as string, 10);
+    if (!yearId) return res.status(400).json({ message: "Missing Year ID" });
+
+    const filterQuery = { SCHOOL_ID: userMapping.SCHOOL_ID, SCHOOL_YR_ID: yearId };
+    const [personnelData, adminData] = await Promise.all([
+      benchmarkDb.collection("EmployeePersonnel").findOne(filterQuery),
+      benchmarkDb.collection("EmployeeAdminSupport").findOne(filterQuery)
+    ]);
+
+    //Merge both tables into one object for the form
+    const combinedData: any = { ...(personnelData || {}), ...(adminData || {}) };
+
+    res.status(200).json(combinedData || {});
+  } catch (error) {
+    console.error("Autofill error:", error);
+    res.status(500).json({ message: "Error fetching existing data" });
   }
 });
 
