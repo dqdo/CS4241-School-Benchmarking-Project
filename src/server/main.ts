@@ -4,8 +4,6 @@ import * as dotenv from "dotenv"
 import {Db, MongoClient, ServerApiVersion} from "mongodb";
 import {auth} from "express-openid-connect"
 import {requireAdmin, requireAuth} from "../middleware/auth.js";
-// @ts-ignore
-import chatbot from "./chatbot-ai.ts";
 
 const app = express();
 dotenv.config();
@@ -37,7 +35,6 @@ app.use(express.json());
 app.use(auth(config));
 app.use("/", requireAuth); // get/post is always protected by being logged in. If not logged in, users are redirected to login page
 app.use("/admin", requireAdmin); // get/post path should be /admin/xxx if the route should only be accessed my admins
-app.use("/", chatbot);
 
 let db: Db | undefined = undefined;
 
@@ -52,34 +49,361 @@ app.get("/currentUser", (req, res) => {
     res.status(200).json({email: user?.email });
 });
 
-app.get("/admin/test", async (req, res) => {
-  if(!db){
-    res.status(500).json({ message: "Failed to connect to DB" });
-    return;
-  }
-  const data = await db.collection("TestData").findOne();
-  if(!data){
-    res.status(404).json({message: "Data not found"});
-    return;
-  }
-  res.status(200).json(data.Test1);
+app.get("/acceptanceRate", async (req, res) => {
+    if(!db){
+        return res.status(500).send("Database connection error");
+    }
+    const school = req.query.school ? Number(req.query.school) : undefined;
+
+    const acceptances = await db.collection("AdmissionActivity").aggregate([
+        {
+            $match: { SCHOOL_ID: school }
+        },
+        {
+            $group: {
+                _id: null,
+                totalAcceptances: { $sum: "$ACCEPTANCES_TOTAL" }
+            }
+        }
+    ]).toArray();
+
+    const applications = await db.collection("AdmissionActivity").aggregate([
+        {
+            $match: { SCHOOL_ID: school }
+        },
+        {
+            $group: {
+                _id: null,
+                totalApplications: { $sum: "$COMPLETED_APPLICATION_TOTAL" }
+            }
+        }
+    ]).toArray();
+    const acceptanceRate = (acceptances[0].totalAcceptances || 0 )/ (applications[0].totalApplications || 1) * 100;
+    res.status(200).json({acceptanceRate});
 });
 
-app.get("/test1", async (req, res) => {
-  if(!db){
-    res.json({message: "Failed to connect to DB"}).status(500);
-    return;
-  }
-  const data = await db.collection("TestData").findOne();
-  if(!data){
-    res.status(404).json({message: "Data not found"});
-    return;
-  }
-  res.status(200).json(data.Test2);
+app.get("/yield", async (req, res) => {
+    if(!db){
+        return res.status(500).send("Database connection error");
+    }
+    const school = req.query.school ? Number(req.query.school) : undefined;
+
+    const acceptances = await db.collection("AdmissionActivity").aggregate([
+        {
+            $match: { SCHOOL_ID: school }
+        },
+        {
+            $group: {
+                _id: null,
+                totalAcceptances: { $sum: "$ACCEPTANCES_TOTAL" }
+            }
+        }
+    ]).toArray();
+
+    const newEnrollments = await db.collection("AdmissionActivity").aggregate([
+        {
+            $match: { SCHOOL_ID: school }
+        },
+        {
+            $group: {
+                _id: null,
+                newEnrollments: { $sum: "$NEW_ENROLLMENTS_TOTAL" }
+            }
+        }
+    ]).toArray();
+    const _yield = (newEnrollments[0].newEnrollments || 0 )/ (acceptances[0].totalAcceptances || 1) * 100;
+    res.status(200).json({_yield});
 });
 
-app.get("/loggedIn", (req, res) => {res.status(200).json({status: req.oidc.isAuthenticated()});
+app.get("/attrition", async (req, res) => {
+    if(!db){
+        return res.status(500).send("Database connection error");
+    }
+    const school = req.query.school ? Number(req.query.school) : undefined;
+
+    const latestYearDoc = await db.collection("AdmissionActivity")
+        .find({ SCHOOL_ID: school })
+        .sort({ SCHOOL_YR_ID: -1 })
+        .limit(1)
+        .toArray();
+
+    const latestYear = latestYearDoc[0].SCHOOL_YR_ID;
+
+    const totalNewEnrollments = await db.collection("AdmissionActivity")
+        .aggregate([
+            { $match: { SCHOOL_ID: school, SCHOOL_YR_ID: latestYear } },
+            { $group: { _id: null, total: { $sum: "$NEW_ENROLLMENTS_TOTAL" } } }
+        ])
+        .toArray();
+
+    const totalLostStudents = await db.collection("EnrollAttrition")
+        .aggregate([
+            { $match: { SCHOOL_ID: school, SCHOOL_YR_ID: latestYear } },
+            { $group: { _id: null, total: { $sum: "$STUD_NOT_RETURN" } } }
+        ])
+        .toArray();
+    const attritionRate = (totalLostStudents[0].total || 0) / (totalNewEnrollments[0].total || 1) * 100;
+    res.status(200).json({attritionRate});
 });
+
+app.get("/totalTeacherFTEs", async (req, res) => {
+  if (!db) return res.status(500).send("Database connection error");
+  const school = req.query.school ? Number(req.query.school) : undefined;
+
+  const result = await db.collection("EmployeePersonnel").aggregate([
+    { $match: { SCHOOL_ID: school } },
+    { $group: { _id: null, totalTeacherFTEs: { $sum: "$FTE_ONLY_NUM" } } }
+  ]).toArray();
+
+  const totalTeacherFTEs = result[0]?.totalTeacherFTEs || 0;
+  res.status(200).json({ totalTeacherFTEs });
+});
+
+app.get("/totalFTEs", async (req, res) => {
+  if (!db) return res.status(500).send("Database connection error");
+  const school = req.query.school ? Number(req.query.school) : undefined;
+
+  const result = await db.collection("EmployeePersonnel").aggregate([
+    { $match: { SCHOOL_ID: school } },
+    { $group: { _id: null, totalFTEs: { $sum: "$TOTAL_EMPLOYEES" } } }
+  ]).toArray();
+
+  const totalFTEs = result[0]?.totalFTEs || 0;
+  res.status(200).json({ totalFTEs });
+});
+
+app.get("/studentsPerTeacher", async (req, res) => {
+  if (!db) return res.status(500).send("Database connection error");
+  const school = req.query.school ? Number(req.query.school) : undefined;
+
+  const teacherResult = await db.collection("EmployeePersonnel").aggregate([
+    { $match: { SCHOOL_ID: school } },
+    { $group: { _id: null, totalTeacherFTEs: { $sum: "$FTE_ONLY_NUM" } } }
+  ]).toArray();
+
+  const studentResult = await db.collection("EnrollAttrition").aggregate([
+    { $match: { SCHOOL_ID: school } },
+    { $group: { _id: null, totalStudents: { $sum: "$STUDENTS_ADDED_DURING_YEAR" } } }
+  ]).toArray();
+
+  const totalTeacherFTEs = teacherResult[0]?.totalTeacherFTEs || 1;
+  const totalStudents = studentResult[0]?.totalStudents || 0;
+  const studentsPerTeacher = totalStudents / totalTeacherFTEs;
+  res.status(200).json({ studentsPerTeacher });
+});
+
+app.get("/teacherFTEPer1000", async (req, res) => {
+  if (!db) return res.status(500).send("Database connection error");
+  const school = req.query.school ? Number(req.query.school) : undefined;
+
+  const teacherResult = await db.collection("EmployeePersonnel").aggregate([
+    { $match: { SCHOOL_ID: school } },
+    { $group: { _id: null, totalTeacherFTEs: { $sum: "$FTE_ONLY_NUM" } } }
+  ]).toArray();
+
+  const studentResult = await db.collection("EnrollAttrition").aggregate([
+    { $match: { SCHOOL_ID: school } },
+    { $group: { _id: null, totalStudents: { $sum: "$STUDENTS_ADDED_DURING_YEAR" } } }
+  ]).toArray();
+
+  const totalTeacherFTEs = teacherResult[0]?.totalTeacherFTEs || 0;
+  const totalStudents = studentResult[0]?.totalStudents || 1;
+  const teacherFTEPer1000 = (totalTeacherFTEs / totalStudents) * 1000;
+  res.status(200).json({ teacherFTEPer1000 });
+});
+
+app.get("/adminsPer1000", async (req, res) => {
+  if (!db) return res.status(500).send("Database connection error");
+  const school = req.query.school ? Number(req.query.school) : undefined;
+
+  const adminResult = await db.collection("EmployeeAdminSupport").aggregate([
+    { $match: { SCHOOL_ID: school } },
+    { $group: { _id: null, totalAdmins: { $sum: { $add: ["$FTE_EXEMPT", "$FTE_NONEXEMPT"] } } } }
+  ]).toArray();
+
+  const studentResult = await db.collection("EnrollAttrition").aggregate([
+    { $match: { SCHOOL_ID: school } },
+    { $group: { _id: null, totalStudents: { $sum: "$STUDENTS_ADDED_DURING_YEAR" } } }
+  ]).toArray();
+
+  const totalAdmins = adminResult[0]?.totalAdmins || 0;
+  const totalStudents = studentResult[0]?.totalStudents || 1;
+  const adminsPer1000 = (totalAdmins / totalStudents) * 1000;
+  res.status(200).json({ adminsPer1000 });
+});
+
+app.get("/employeesPer1000", async (req, res) => {
+  if (!db) return res.status(500).send("Database connection error");
+  const school = req.query.school ? Number(req.query.school) : undefined;
+
+  const employeeResult = await db.collection("EmployeePersonnel").aggregate([
+    { $match: { SCHOOL_ID: school } },
+    { $group: { _id: null, totalEmployees: { $sum: "$TOTAL_EMPLOYEES" } } }
+  ]).toArray();
+
+  const studentResult = await db.collection("EnrollAttrition").aggregate([
+    { $match: { SCHOOL_ID: school } },
+    { $group: { _id: null, totalStudents: { $sum: "$STUDENTS_ADDED_DURING_YEAR" } } }
+  ]).toArray();
+
+  const totalEmployees = employeeResult[0]?.totalEmployees || 0;
+  const totalStudents = studentResult[0]?.totalStudents || 1;
+  const employeesPer1000 = (totalEmployees / totalStudents) * 1000;
+  res.status(200).json({ employeesPer1000 });
+});
+
+app.get("/admissions", async (req, res) => {
+  if(!db){
+    return res.status(500).send("Database connection error");
+  }
+  const school = req.query.school ? Number(req.query.school) : undefined;
+  const year = req.query.year ? Number(req.query.year) : undefined;
+  const field = req.query.field ? req.query.field : undefined;
+
+  let projection = {};
+
+  switch (field) {
+    case "ACCEPTANCES":
+      projection = {
+        _id: 0,
+        DATA: "$ACCEPTANCES_TOTAL",
+        DESCRIPTION: "$grade.DESCRIPTION_TX"
+      }
+      break;
+    case "ENROLLMENTS":
+      projection = {
+        _id: 0,
+        DATA: "$NEW_ENROLLMENTS_TOTAL",
+        DESCRIPTION: "$grade.DESCRIPTION_TX"
+      }
+      break;
+    case "ENROLL CAPACITY":
+      projection = {
+        _id: 0,
+        DATA: "$CAPACITY_ENROLL",
+        DESCRIPTION: "$grade.DESCRIPTION_TX"
+      }
+      break;
+    case "COMPLETED APPLICATION":
+      projection = {
+        _id: 0,
+        DATA: "$COMPLETED_APPLICATION_TOTAL",
+        DESCRIPTION: "$grade.DESCRIPTION_TX"
+      }
+      break;
+  }
+
+  const data = await db.collection("AdmissionActivity").aggregate([
+    {
+      $match: {
+        SCHOOL_ID: school,
+        SCHOOL_YR_ID: year
+      }
+    },
+    {
+      $lookup: {
+        from: "GradeDefinitions",
+        localField: "GRADE_DEF_ID",
+        foreignField: "ID",
+        as: "grade"
+      }
+    },
+    {
+      $unwind: "$grade"
+    },
+    {
+      $sort: { "grade.ID": 1 }
+    },
+    {
+      $project: projection
+    }
+  ]).toArray();
+
+  return res.status(200).json(data);
+})
+
+app.get("/enrollment-attrition", async (req, res) => {
+  if (!db) return res.status(500).send("Database connection error");
+
+  const school = req.query.school ? Number(req.query.school) : undefined;
+  const year = req.query.year ? Number(req.query.year) : undefined;
+  const field = req.query.field as string | undefined;
+  const collection = req.query.collection as string | undefined;
+
+  const validFields = [
+    "STUDENTS_ADDED_DURING_YEAR",
+    "STUDENTS_GRADUATED",
+    "STUD_DISS_WTHD",
+    "STUD_NOT_RETURN",
+    "STUD_NOT_INV",
+    "EXCH_STUD_REPTS",
+  ];
+
+  const validCollections = ["EnrollAttrition", "EnrollAttritionSOC"];
+
+  if (!field || !validFields.includes(field)) {
+    return res.status(400).send("Invalid or missing field");
+  }
+
+  if (!collection || !validCollections.includes(collection)) {
+    return res.status(400).send("Invalid or missing collection");
+  }
+
+  const data = await db.collection(collection).aggregate([
+    {
+      $match: {
+        SCHOOL_ID: school,
+        SCHOOL_YR_ID: year,
+      },
+    },
+    {
+      $lookup: {
+        from: "GradeDefinitions",
+        localField: "GRADE_DEF_ID",
+        foreignField: "ID",
+        as: "grade",
+      },
+    },
+    { $unwind: "$grade" },
+    { $sort: { "grade.ID": 1 } },
+    {
+      $project: {
+        _id: 0,
+        VALUE: `$${field}`,
+        DESCRIPTION: "$grade.DESCRIPTION_TX",
+      },
+    },
+  ]).toArray();
+
+  return res.status(200).json(data);
+});
+
+app.get("/schools", async (req, res) => {
+  if(!db)
+    return res.status(500).send("Database connection error");
+
+  const data = await db.collection("School").find(
+      {},
+      { projection: { _id: false, ID: true, NAME_TX: true } }
+  ).toArray();
+  return res.status(200).json(data);
+});
+
+app.get("/years", async (req, res) => {
+  if(!db)
+    return res.status(500).send("Database connection error");
+
+  const data = await db.collection("SchoolYear").find(
+      {},
+      { projection: { _id: false, ID: true, SCHOOL_YEAR: true } }
+  ).sort({ SCHOOL_YEAR: -1 }).toArray();
+  return res.status(200).json(data);
+});
+
+
+app.get("/loggedIn", (req, res) => {
+  res.status(200).json({status: req.oidc.isAuthenticated()});
+})
 
 app.post("/api/submit-admissions", async (req, res) => {
   if(!client) { return res.status(500).json({ message: "Failed to connect to DB" }); }
@@ -207,8 +531,6 @@ app.post("/api/submit-enrollment", async (req, res) => {
     const updateFieldsSOC = parseNumericFields(req.body, socFields);
 
     //Define the fallback values for new rows
-    //This way, new columns will match the old columns data format, but will not include the useless/unnecessary info
-    //Also sets a unique ID
     const insertFields: any = {
       ID: Date.now(),
       LOCK_ID: 1,
@@ -605,6 +927,7 @@ app.get("/api/enrollment-sources-data", async (req, res) => {
 ViteExpress.listen(app, 3000, async () => {
   await client.connect();
   console.log('Connected to MongoDB');
-  db = client.db("Test");
+
+  db = client.db("School-Benchmark");
   console.log("Server is listening on port 3000...");
 });

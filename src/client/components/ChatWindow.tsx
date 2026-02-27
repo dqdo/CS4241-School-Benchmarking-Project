@@ -9,7 +9,8 @@ export default function ChatWindow() {
     const [isExpanded, setIsExpanded] = useState(false);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
-    const [messages, setMessages] = useState<{ role: string; text: string }[]>([]);
+    const [messages, setMessages] = useState<{ role: string; text: string; queryPlan?: Record<string, any> | null }[]>([]);
+    const [openQueryIdx, setOpenQueryIdx] = useState<number | null>(null);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -50,8 +51,9 @@ export default function ChatWindow() {
 
             const data = await res.json();
             const reply = data.reply ?? data.error ?? "Something went wrong.";
+            const queryPlan = data.queryPlan ?? null;
 
-            setMessages((prev) => [...prev, { role: "assistant", text: reply }]);
+            setMessages((prev) => [...prev, { role: "assistant", text: reply, queryPlan }]);
         } catch {
             setMessages((prev) => [
                 ...prev,
@@ -87,17 +89,30 @@ export default function ChatWindow() {
                         <span className="text-white text-sm font-semibold tracking-wide">
                             AI Assistant
                         </span>
-                        <button
-                            onClick={toggleExpand}
-                            aria-label={isExpanded ? "Shrink chat" : "Expand chat"}
-                            className="flex items-center justify-center p-1 opacity-80 hover:opacity-100 transition-opacity cursor-pointer bg-transparent border-none"
-                        >
-                            {isExpanded ? (
-                                <img src={CollapseIcon} alt="Collapse" width={16} height={16} />
-                            ) : (
-                                <img src={ExpandIcon} alt="Expand" width={16} height={16} />
+                        <div className="flex items-center gap-2">
+                            {messages.length > 0 && (
+                                <button
+                                    onClick={() => setMessages([])}
+                                    disabled={isLoading}
+                                    aria-label="Clear chat history"
+                                    title="Clear chat"
+                                    className="flex items-center justify-center px-2 py-0.5 rounded text-xs text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer bg-transparent border border-white/20 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-white/70"
+                                >
+                                    Clear
+                                </button>
                             )}
-                        </button>
+                            <button
+                                onClick={toggleExpand}
+                                aria-label={isExpanded ? "Shrink chat" : "Expand chat"}
+                                className="flex items-center justify-center p-1 opacity-80 hover:opacity-100 transition-opacity cursor-pointer bg-transparent border-none"
+                            >
+                                {isExpanded ? (
+                                    <img src={CollapseIcon} alt="Collapse" width={16} height={16} />
+                                ) : (
+                                    <img src={ExpandIcon} alt="Expand" width={16} height={16} />
+                                )}
+                            </button>
+                        </div>
                     </div>
 
                     <div className="flex-1 p-3 overflow-y-auto space-y-2 bg-white">
@@ -109,15 +124,43 @@ export default function ChatWindow() {
                             </div>
                         ) : (
                             messages.map((m, idx) => (
-                                <div
-                                    key={idx}
-                                    className={`w-fit max-w-[85%] px-3 py-2 rounded-xl text-sm ${
-                                        m.role === "user"
-                                            ? "ml-auto bg-blue-600 text-white"
-                                            : "mr-auto bg-gray-100 text-gray-900"
-                                    }`}
-                                >
-                                    {m.text}
+                                <div key={idx} className={`flex flex-col gap-1 ${m.role === "user" ? "items-end" : "items-start"}`}>
+                                    <div
+                                        className={`w-fit max-w-[85%] px-3 py-2 rounded-xl text-sm ${
+                                            m.role === "user"
+                                                ? "bg-blue-600 text-white"
+                                                : "bg-gray-100 text-gray-900"
+                                        }`}
+                                    >
+                                        {m.text}
+                                    </div>
+                                    {m.role === "assistant" && m.queryPlan && (
+                                        <div className="w-fit max-w-[85%]">
+                                            <button
+                                                onClick={() => setOpenQueryIdx(openQueryIdx === idx ? null : idx)}
+                                                className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors bg-transparent border-none cursor-pointer px-1 py-0.5 rounded"
+                                            >
+                                                <svg
+                                                    width="10" height="10" viewBox="0 0 10 10" fill="currentColor"
+                                                    style={{ transform: openQueryIdx === idx ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 180ms ease" }}
+                                                >
+                                                    <path d="M3 1.5l4 3.5-4 3.5V1.5z" />
+                                                </svg>
+                                                View Query
+                                            </button>
+                                            {openQueryIdx === idx && (
+                                                <pre className="mt-1 text-xs bg-gray-900 text-green-400 rounded-lg px-3 py-2 overflow-x-auto whitespace-pre-wrap break-all max-w-full">
+                                                    {m.queryPlan.operation === "aggregate"
+                                                        ? JSON.stringify(m.queryPlan.pipeline, null, 2)
+                                                        : JSON.stringify({
+                                                            ...(m.queryPlan.query && Object.keys(m.queryPlan.query).length > 0 && { filter: m.queryPlan.query }),
+                                                            ...(m.queryPlan.projection && Object.keys(m.queryPlan.projection).length > 0 && { fields: m.queryPlan.projection }),
+                                                        }, null, 2)
+                                                    }
+                                                </pre>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             ))
                         )}
