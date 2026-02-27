@@ -11,13 +11,17 @@ interface ValidatedNumberInputProps {
 export default function ValidatedNumberInput({ name, value, onChange, required = false, label }: ValidatedNumberInputProps) {
     const [error, setError] = useState<string>("");
 
-    // Validate whenever value changes
+    //Validate whenever value changes
     useEffect(() => {
-        const hasLetters = /[a-zA-Z]/.test(value);
-        const hasInvalidChars = /[^0-9]/.test(value);
+        if (value === "") {
+            setError("");
+            return;
+        }
 
-        if (hasLetters || hasInvalidChars) {
-            setError("Please enter only positive whole numbers");
+        const hasInvalidChars = /^\d+(\.\d+)?$/.test(value);
+
+        if (!hasInvalidChars) {
+            setError("Please enter only valid positive numbers");
             return;
         }
 
