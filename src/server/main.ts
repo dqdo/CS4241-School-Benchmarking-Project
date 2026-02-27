@@ -53,7 +53,7 @@ app.get("/currentUser", (req, res) => {
 
 app.get("/admin/test", async (req, res) => {
   if(!db){
-    res.json({message: "Failed to connect to DB"}).status(500);
+    res.status(500).json({ message: "Failed to connect to DB" });
     return;
   }
   const data = await db.collection("TestData").findOne();
@@ -365,6 +365,64 @@ app.get("/api/available-grades", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error fetching grades" });
+  }
+});
+
+app.post("/api/save-draft", async (req, res) => {
+  if(!client) return res.status(500).json({ message: "No DB connection" });
+  try {
+    const benchmarkDb = client.db("Test-School-Benchmark");
+
+    //Get user's email
+    const userEmail = req.oidc?.user?.email;
+    if (!userEmail) return res.status(400).json({ message: "Could not find user's email" });
+    //From message, get all the data to save the form
+    const formType = req.body.formType;
+    const draftData = req.body.draftData;
+    if (!formType || !draftData) return res.status(400).json({ message: "Missing required data" });
+
+    //Update the form drafts collection with the necessary data
+    await benchmarkDb.collection("FormDrafts").updateOne(
+        {USER_EMAIL: userEmail, FORM_TYPE: formType, SCHOOL_YR_ID: draftData.SCHOOL_YR_ID, GRADE_DEF_ID: draftData.GRADE_DEF_ID},
+        { $set: {DRAFT_DATA: draftData, UPDATED_AT: Date.now()} },
+        {upsert: true}
+    )
+    res.status(200).json({message: "Successfully saved draft data"});
+  }
+  catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error updating data" });
+  }
+});
+
+app.get("/api/get-draft", async (req, res) => {
+  if(!client) return res.status(500).json({ message: "No DB connection" });
+  try {
+    const benchmarkDb = client.db("Test-School-Benchmark");
+
+    //Get user's email
+    const userEmail = req.oidc?.user?.email;
+    if (!userEmail) return res.status(400).json({ message: "Could not find user's email" });
+    //Get necessary data from the message
+    const formType = req.query.formType as string;
+    const schoolYearId = parseInt(req.query.SCHOOL_YR_ID as string, 10);
+    const gradeDefId = parseInt(req.query.GRADE_DEF_ID as string, 10);
+    if (!formType || !schoolYearId || !gradeDefId) return res.status(400).json({ message: "Missing required data" });
+
+    //Get the form data from the database
+    const draftDocument = await benchmarkDb.collection("FormDrafts").findOne(
+        {USER_EMAIL: userEmail, FORM_TYPE: formType, SCHOOL_YR_ID: schoolYearId, GRADE_DEF_ID: gradeDefId},
+        { projection: { DRAFT_DATA: 1, _id: 0 }}
+    )
+    if (draftDocument && draftDocument.DRAFT_DATA) {
+      res.status(200).json(draftDocument.DRAFT_DATA);
+    } else {
+      res.status(200).json(null);
+    }
+  }
+  catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error getting draft data" });
   }
 });
 
