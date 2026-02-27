@@ -13,6 +13,9 @@ function App() {
         Object.values(TABS).forEach(v => defaultTabs.push(false));
         defaultTabs[0] = true;
         setTabsActive(defaultTabs);
+
+        fetch("/belongsToSchool").then(data => data.json()).then(d => console.log(d));
+
     }, [])
 
 /*
