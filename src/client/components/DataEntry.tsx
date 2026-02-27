@@ -4,7 +4,7 @@ import EnrollmentForm from './EnrollmentForm';
 import EmployeeForm from './EmployeeForm';
 
 export default function DataEntry() {
-	const [activeForm, setActiveForm] = useState<"admissions" | "enrollment" | "personnel">("admissions");
+	const [activeForm, setActiveForm] = useState<"admissions" | "enrollment" | "employee">("employee");
 
 	const getTabClass = (tabName: string) => `px-4 py-2 rounded-t-lg font-semibold transition-colors ${
 		activeForm === tabName
@@ -17,21 +17,21 @@ export default function DataEntry() {
 			<h1 className="text-3xl font-bold text-[#1E3869] mb-6">Annual Benchmarking Data</h1>
 
 			<div className="flex space-x-2 mb-6 border-b-2 border-gray-200 pb-2">
+				<button className={getTabClass("employee")} onClick={() => setActiveForm("employee")}>
+					Employee Data
+				</button>
 				<button className={getTabClass("admissions")} onClick={() => setActiveForm("admissions")}>
 					Admissions Activity
 				</button>
 				<button className={getTabClass("enrollment")} onClick={() => setActiveForm("enrollment")}>
 					Enrollment & Attrition
 				</button>
-				<button className={getTabClass("personnel")} onClick={() => setActiveForm("personnel")}>
-					Personnel Data
-				</button>
 			</div>
 
 			<div className="bg-white p-6 rounded-lg shadow-md">
 				{activeForm === "admissions" && <AdmissionsForm />}
 				{activeForm === "enrollment" && <EnrollmentForm />}
-				{activeForm === "personnel" && <EmployeeForm />}
+				{activeForm === "employee" && <EmployeeForm />}
 			</div>
 		</div>
 	);
