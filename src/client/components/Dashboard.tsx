@@ -2,6 +2,8 @@ import {useEffect, useState} from "react";
 import {School} from "./admissions/AdmissionsGraph";
 import Dropdown from "../elements/Dropdown";
 import EnrollmentKPIs from "./dashboard/EnrollmentKPIs";
+import PersonnelKPIs from "./dashboard/PersonnelKPIs";
+import EmployeeRatioKPIs from "./dashboard/EmployeeRatioKPIs";
 
 export default function Dashboard() {
 	const [schools, setSchools] = useState<School[]>([]);
@@ -20,10 +22,12 @@ export default function Dashboard() {
 			<EnrollmentKPIs selectedSchool={schoolSelection}/>
 			<hr />
 			<h1 className={"font-bold text-2xl"}>Personnel</h1>
+			<PersonnelKPIs selectedSchool={schoolSelection}/>
 			<hr />
 			<h1 className={"font-bold text-2xl"}>Attrition</h1>
 			<hr />
 			<h1 className={"font-bold text-2xl"}>Employee Ratios</h1>
+			<EmployeeRatioKPIs selectedSchool={schoolSelection}/>
 		</div>
 	)
 }
