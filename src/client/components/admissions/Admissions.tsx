@@ -11,7 +11,7 @@ export default function Admissions() {
                 <AdmissionsGraph label={"Enrollments"}/>
             </div>
             <div className={"border-2 border-black"}>
-                <AdmissionsGraph label={"Inquiries"} />
+                <AdmissionsGraph label={"Enroll Capacity"} />
             </div>
             <div className={"border-2 border-black"}>
                 <AdmissionsGraph label={"Completed Application"} />

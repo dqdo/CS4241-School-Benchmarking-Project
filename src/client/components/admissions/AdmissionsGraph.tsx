@@ -10,8 +10,7 @@ type AdmissionsGraphProps = {
 }
 
 type AdmissionsDataEntry = {
-    BOYS: number;
-    GIRLS: number;
+    DATA: number;
     DESCRIPTION: string;
 };
 
@@ -49,14 +48,9 @@ export default function AdmissionsGraph(props: AdmissionsGraphProps) {
             labels: admissionsData.map((row) => row.DESCRIPTION),
             datasets: [
                 {
-                    label: "Boys " + props.label,
-                    data: admissionsData.map((row) => row.BOYS),
+                    label: props.label,
+                    data: admissionsData.map((row) => row.DATA),
                     backgroundColor: "rgba(75, 192, 192, 0.5)",
-                },
-                {
-                    label: "Girls " + props.label,
-                    data: admissionsData.map((row) => row.GIRLS),
-                    backgroundColor: "rgba(97, 54, 192, 0.5)",
                 },
             ],
         };

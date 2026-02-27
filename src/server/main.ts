@@ -66,32 +66,28 @@ app.get("/admissions", async (req, res) => {
     case "ACCEPTANCES":
       projection = {
         _id: 0,
-        BOYS: "$ACCEPTANCES_BOYS",
-        GIRLS: "$ACCEPTANCES_GIRLS",
+        DATA: "$ACCEPTANCES_TOTAL",
         DESCRIPTION: "$grade.DESCRIPTION_TX"
       }
       break;
     case "ENROLLMENTS":
       projection = {
         _id: 0,
-        BOYS: "$NEW_ENROLLMENTS_BOYS",
-        GIRLS: "$NEW_ENROLLMENTS_GIRLS",
+        DATA: "$NEW_ENROLLMENTS_TOTAL",
         DESCRIPTION: "$grade.DESCRIPTION_TX"
       }
       break;
-    case "INQUIRIES":
+    case "ENROLL CAPACITY":
       projection = {
         _id: 0,
-        BOYS: "$INQUIRIES_BOYS",
-        GIRLS: "$INQUIRIES_GIRLS",
+        DATA: "$CAPACITY_ENROLL",
         DESCRIPTION: "$grade.DESCRIPTION_TX"
       }
       break;
     case "COMPLETED APPLICATION":
       projection = {
         _id: 0,
-        BOYS: "$COMPLETED_APPLICATION_BOYS",
-        GIRLS: "$COMPLETED_APPLICATION_GIRLS",
+        DATA: "$COMPLETED_APPLICATION_TOTAL",
         DESCRIPTION: "$grade.DESCRIPTION_TX"
       }
       break;
