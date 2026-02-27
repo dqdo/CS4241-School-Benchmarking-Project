@@ -14,7 +14,7 @@ type AdmissionsDataEntry = {
     DESCRIPTION: string;
 };
 
-type School = {
+export type School = {
     NAME_TX: string;
     ID: number;
 }
@@ -36,7 +36,6 @@ export default function AdmissionsGraph(props: AdmissionsGraphProps) {
 
 
     useEffect(() => {
-
         fetch("/schools").then(res => res.json()).then(data => setSchools(data.filter((s: School) => !Number(s.NAME_TX))));
         fetch("/years").then(res => res.json()).then(data => setYears(data));
         let isMounted = true;
