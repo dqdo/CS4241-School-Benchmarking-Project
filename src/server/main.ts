@@ -56,6 +56,16 @@ app.get("/loggedIn", (req, res) => {
     res.status(200).json({ status: req.oidc.isAuthenticated() });
 });
 
+const SCHOOL_NAMESPACE = "https://cs4241-school-benchmarking-project-1.onrender.com/schoolId";
+app.get("/belongsToSchool", (req, res) => {
+  if (!req.oidc.user) {
+    return res.status(401).json({ message: "Not authenticated" });
+  }
+  const schoolId = req.oidc.user[SCHOOL_NAMESPACE];
+  return res.status(200).json({ SCHOOL_ID: schoolId });
+})
+
+
 ViteExpress.listen(app, 3000, async () => {
   await client.connect();
   console.log("Connected to MongoDB");
