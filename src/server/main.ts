@@ -55,11 +55,71 @@ app.get("/admissions", async (req, res) => {
   }
   const school = req.query.school ? Number(req.query.school) : undefined;
   const year = req.query.year ? Number(req.query.year) : undefined;
+  const field = req.query.field ? req.query.field : undefined;
 
-  const data = await db.collection("AdmissionActivity").find(
-      {SCHOOL_ID: school, SCHOOL_YR_ID: year},
-      { projection: { _id: false, ACCEPTANCES_BOYS: true, ACCEPTANCES_GIRLS: true, GRADE_DEF_ID:true } }
-  ).toArray();
+  let projection = {};
+
+  switch (field) {
+    case "ACCEPTANCES":
+      projection = {
+        _id: 0,
+        BOYS: "$ACCEPTANCES_BOYS",
+        GIRLS: "$ACCEPTANCES_GIRLS",
+        DESCRIPTION: "$grade.DESCRIPTION_TX"
+      }
+      break;
+    case "ENROLLMENTS":
+      projection = {
+        _id: 0,
+        BOYS: "$NEW_ENROLLMENTS_BOYS",
+        GIRLS: "$NEW_ENROLLMENTS_GIRLS",
+        DESCRIPTION: "$grade.DESCRIPTION_TX"
+      }
+      break;
+    case "INQUIRIES":
+      projection = {
+        _id: 0,
+        BOYS: "$INQUIRIES_BOYS",
+        GIRLS: "$INQUIRIES_GIRLS",
+        DESCRIPTION: "$grade.DESCRIPTION_TX"
+      }
+      break;
+    case "COMPLETED APPLICATION":
+      projection = {
+        _id: 0,
+        BOYS: "$COMPLETED_APPLICATION_BOYS",
+        GIRLS: "$COMPLETED_APPLICATION_GIRLS",
+        DESCRIPTION: "$grade.DESCRIPTION_TX"
+      }
+      break;
+  }
+
+  const data = await db.collection("AdmissionActivity").aggregate([
+    {
+      $match: {
+        SCHOOL_ID: school,
+        SCHOOL_YR_ID: year
+      }
+    },
+    {
+      $lookup: {
+        from: "GradeDefinitions",
+        localField: "GRADE_DEF_ID",
+        foreignField: "ID",
+        as: "grade"
+      }
+    },
+    {
+      $unwind: "$grade"
+    },
+    {
+      $sort: { "grade.ID": 1 }
+    },
+    {
+      $project: projection
+    }
+  ]).toArray();
+
   return res.status(200).json(data);
 })
 
@@ -71,6 +131,17 @@ app.get("/schools", async (req, res) => {
       {},
       { projection: { _id: false, ID: true, NAME_TX: true } }
   ).toArray();
+  return res.status(200).json(data);
+});
+
+app.get("/years", async (req, res) => {
+  if(!db)
+    return res.status(500).send("Database connection error");
+
+  const data = await db.collection("SchoolYear").find(
+      {},
+      { projection: { _id: false, ID: true, SCHOOL_YEAR: true } }
+  ).sort({ SCHOOL_YEAR: -1 }).toArray();
   return res.status(200).json(data);
 });
 

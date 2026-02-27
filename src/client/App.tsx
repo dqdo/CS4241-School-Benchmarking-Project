@@ -4,7 +4,7 @@ import Footer from "./components/Footer";
 import {useEffect, useState} from "react";
 import Dashboard from "./components/Dashboard";
 import DataEntry from "./components/DataEntry";
-import Admissions from "./components/Admissions";
+import Admissions from "./components/admissions/Admissions";
 
 function App() {
     const [tabsActive, setTabsActive] = useState<boolean[]>([]);
