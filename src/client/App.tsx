@@ -14,8 +14,6 @@ function App() {
         defaultTabs[0] = true;
         setTabsActive(defaultTabs);
 
-        fetch("/belongsToSchool").then(data => data.json()).then(d => console.log(d));
-
     }, [])
 
 /*

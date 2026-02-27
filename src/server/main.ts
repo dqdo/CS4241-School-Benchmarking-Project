@@ -39,6 +39,7 @@ app.use("/admin", requireAdmin); // get/post path should be /admin/xxx if the ro
 app.use("/", chatbot);
 
 let db: Db | undefined = undefined;
+const SCHOOL_NAMESPACE = "https://cs4241-school-benchmarking-project-1.onrender.com/schoolId";
 
 /*
   Users:
@@ -121,16 +122,18 @@ app.get("/admissions", async (req, res) => {
       $project: projection
     }
   ]).toArray();
-
   return res.status(200).json(data);
 })
 
 app.get("/schools", async (req, res) => {
   if(!db)
     return res.status(500).send("Database connection error");
+  if(!req.oidc.user)
+    return res.status(403).send("Not Authenticated");
+  const schoolId = req.oidc.user[SCHOOL_NAMESPACE];
 
   const data = await db.collection("School").find(
-      {},
+      schoolId !== "Admin" ? {ID: schoolId} : {},
       { projection: { _id: false, ID: true, NAME_TX: true } }
   ).toArray();
   return res.status(200).json(data);
@@ -152,7 +155,6 @@ app.get("/loggedIn", (req, res) => {
     res.status(200).json({ status: req.oidc.isAuthenticated() });
 });
 
-const SCHOOL_NAMESPACE = "https://cs4241-school-benchmarking-project-1.onrender.com/schoolId";
 app.get("/belongsToSchool", (req, res) => {
   if (!req.oidc.user) {
     return res.status(401).json({ message: "Not authenticated" });
