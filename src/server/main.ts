@@ -4,6 +4,7 @@ import * as dotenv from "dotenv"
 import {Db, MongoClient, ServerApiVersion} from "mongodb";
 import {auth} from "express-openid-connect"
 import {requireAdmin, requireAuth} from "../middleware/auth.js";
+import chatbot from "./chatbot-ai.ts";
 
 const app = express();
 dotenv.config();
@@ -35,6 +36,7 @@ app.use(express.json());
 app.use(auth(config));
 app.use("/", requireAuth); // get/post is always protected by being logged in. If not logged in, users are redirected to login page
 app.use("/admin", requireAdmin); // get/post path should be /admin/xxx if the route should only be accessed my admins
+app.use("/", chatbot);
 
 let db: Db | undefined = undefined;
 
@@ -75,9 +77,8 @@ app.get("/test1", async (req, res) => {
   res.json(data.Test2).status(200);
 });
 
-app.get("/loggedIn", (req, res) => {
-  res.status(200).json({status: req.oidc.isAuthenticated()});
-})
+app.get("/loggedIn", (req, res) => {res.status(200).json({status: req.oidc.isAuthenticated()});
+});
 
 app.post("/api/submit-admissions", async (req, res) => {
   if(!client) { return res.status(500).json({ message: "Failed to connect to DB" }); }
@@ -370,7 +371,6 @@ app.get("/api/available-grades", async (req, res) => {
 ViteExpress.listen(app, 3000, async () => {
   await client.connect();
   console.log('Connected to MongoDB');
-
   db = client.db("Test");
   console.log("Server is listening on port 3000...");
 });
