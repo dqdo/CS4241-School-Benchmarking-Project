@@ -58,10 +58,10 @@ app.get("/admin/test", async (req, res) => {
   }
   const data = await db.collection("TestData").findOne();
   if(!data){
-    res.json({message: "Data not found"}).status(404);
+    res.status(404).json({message: "Data not found"});
     return;
   }
-  res.json(data.Test1).status(200);
+  res.status(200).json(data.Test1);
 });
 
 app.get("/test1", async (req, res) => {
@@ -71,10 +71,10 @@ app.get("/test1", async (req, res) => {
   }
   const data = await db.collection("TestData").findOne();
   if(!data){
-    res.json({message: "Data not found"}).status(404);
+    res.status(404).json({message: "Data not found"});
     return;
   }
-  res.json(data.Test2).status(200);
+  res.status(200).json(data.Test2);
 });
 
 app.get("/loggedIn", (req, res) => {res.status(200).json({status: req.oidc.isAuthenticated()});
