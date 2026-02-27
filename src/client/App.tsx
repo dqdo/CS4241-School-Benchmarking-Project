@@ -1,10 +1,10 @@
-
 import TabBar, {TABS} from "./components/TabBar";
 import Footer from "./components/Footer";
 import {useEffect, useState} from "react";
 import Dashboard from "./components/Dashboard";
 import DataEntry from "./components/DataEntry";
 import Admissions from "./components/admissions/Admissions";
+import EnrollAttrition from "./components/EnrollAttrition/EnrollAttrition";
 
 function App() {
     const [tabsActive, setTabsActive] = useState<boolean[]>([]);
@@ -15,14 +15,6 @@ function App() {
         setTabsActive(defaultTabs);
     }, [])
 
-/*
-    ================================ Adding Tabs ==================================
-    Add new line {tabsActive[n] && <YourNewTab />}
-    In TabBar add the name of your tab to the TABS array.
-    Make sure the order of the names in TABS is the same as the order in this file
-    ==============================================================================
- */
-
   return (
       <div className="h-screen flex flex-col">
           <TabBar tabStatuses={tabsActive} setTabStatuses={setTabsActive} />
@@ -30,6 +22,7 @@ function App() {
                   {tabsActive[0] && <Dashboard />}
                   {tabsActive[1] && <DataEntry />}
                   {tabsActive[2] && <Admissions />}
+                  {tabsActive[3] && <EnrollAttrition />}
               </div>
       </div>
   );

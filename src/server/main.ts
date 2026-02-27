@@ -123,6 +123,62 @@ app.get("/admissions", async (req, res) => {
   return res.status(200).json(data);
 })
 
+app.get("/enrollment-attrition", async (req, res) => {
+  if (!db) return res.status(500).send("Database connection error");
+
+  const school = req.query.school ? Number(req.query.school) : undefined;
+  const year = req.query.year ? Number(req.query.year) : undefined;
+  const field = req.query.field as string | undefined;
+  const collection = req.query.collection as string | undefined;
+
+  const validFields = [
+    "STUDENTS_ADDED_DURING_YEAR",
+    "STUDENTS_GRADUATED",
+    "STUD_DISS_WTHD",
+    "STUD_NOT_RETURN",
+    "STUD_NOT_INV",
+    "EXCH_STUD_REPTS",
+  ];
+
+  const validCollections = ["EnrollAttrition", "EnrollAttritionSOC"];
+
+  if (!field || !validFields.includes(field)) {
+    return res.status(400).send("Invalid or missing field");
+  }
+
+  if (!collection || !validCollections.includes(collection)) {
+    return res.status(400).send("Invalid or missing collection");
+  }
+
+  const data = await db.collection(collection).aggregate([
+    {
+      $match: {
+        SCHOOL_ID: school,
+        SCHOOL_YR_ID: year,
+      },
+    },
+    {
+      $lookup: {
+        from: "GradeDefinitions",
+        localField: "GRADE_DEF_ID",
+        foreignField: "ID",
+        as: "grade",
+      },
+    },
+    { $unwind: "$grade" },
+    { $sort: { "grade.ID": 1 } },
+    {
+      $project: {
+        _id: 0,
+        VALUE: `$${field}`,
+        DESCRIPTION: "$grade.DESCRIPTION_TX",
+      },
+    },
+  ]).toArray();
+
+  return res.status(200).json(data);
+});
+
 app.get("/schools", async (req, res) => {
   if(!db)
     return res.status(500).send("Database connection error");
@@ -305,8 +361,6 @@ app.post("/api/submit-enrollment", async (req, res) => {
     }
 
     //Define the fallback values for new rows
-    //This way, new columns will match the old columns data format, but will not include the useless/unnecessary info
-    //Also sets a unique ID
     const insertFields: any = {
       ID: Date.now(),
       LOCK_ID: 1,
