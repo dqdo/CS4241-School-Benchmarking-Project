@@ -52,6 +52,103 @@ app.get("/currentUser", (req, res) => {
     res.status(200).json({email: user?.email });
 });
 
+app.get("/acceptanceRate", async (req, res) => {
+  if(!db){
+    return res.status(500).send("Database connection error");
+  }
+  const school = req.query.school ? Number(req.query.school) : undefined;
+
+  const acceptances = await db.collection("AdmissionActivity").aggregate([
+    {
+      $match: { SCHOOL_ID: school }
+    },
+    {
+      $group: {
+        _id: null,
+        totalAcceptances: { $sum: "$ACCEPTANCES_TOTAL" }
+      }
+    }
+  ]).toArray();
+
+  const applications = await db.collection("AdmissionActivity").aggregate([
+    {
+      $match: { SCHOOL_ID: school }
+    },
+    {
+      $group: {
+        _id: null,
+        totalApplications: { $sum: "$COMPLETED_APPLICATION_TOTAL" }
+      }
+    }
+  ]).toArray();
+  const acceptanceRate = (acceptances[0].totalAcceptances || 0 )/ (applications[0].totalApplications || 1) * 100;
+  res.status(200).json({acceptanceRate});
+});
+
+app.get("/yield", async (req, res) => {
+  if(!db){
+    return res.status(500).send("Database connection error");
+  }
+  const school = req.query.school ? Number(req.query.school) : undefined;
+
+  const acceptances = await db.collection("AdmissionActivity").aggregate([
+    {
+      $match: { SCHOOL_ID: school }
+    },
+    {
+      $group: {
+        _id: null,
+        totalAcceptances: { $sum: "$ACCEPTANCES_TOTAL" }
+      }
+    }
+  ]).toArray();
+
+  const newEnrollments = await db.collection("AdmissionActivity").aggregate([
+    {
+      $match: { SCHOOL_ID: school }
+    },
+    {
+      $group: {
+        _id: null,
+        newEnrollments: { $sum: "$NEW_ENROLLMENTS_TOTAL" }
+      }
+    }
+  ]).toArray();
+  const _yield = (newEnrollments[0].newEnrollments || 0 )/ (acceptances[0].totalAcceptances || 1) * 100;
+  res.status(200).json({_yield});
+});
+
+app.get("/attrition", async (req, res) => {
+  if(!db){
+    return res.status(500).send("Database connection error");
+  }
+  const school = req.query.school ? Number(req.query.school) : undefined;
+
+  const latestYearDoc = await db.collection("AdmissionActivity")
+      .find({ SCHOOL_ID: school })
+      .sort({ SCHOOL_YR_ID: -1 })
+      .limit(1)
+      .toArray();
+
+  const latestYear = latestYearDoc[0].SCHOOL_YR_ID;
+
+  const totalNewEnrollments = await db.collection("AdmissionActivity")
+      .aggregate([
+        { $match: { SCHOOL_ID: school, SCHOOL_YR_ID: latestYear } },
+        { $group: { _id: null, total: { $sum: "$NEW_ENROLLMENTS_TOTAL" } } }
+      ])
+      .toArray();
+
+  const totalLostStudents = await db.collection("EnrollAttrition")
+      .aggregate([
+        { $match: { SCHOOL_ID: school, SCHOOL_YR_ID: latestYear } },
+        { $group: { _id: null, total: { $sum: "$STUD_NOT_RETURN" } } }
+      ])
+      .toArray();
+  const attritionRate = (totalLostStudents[0].total || 0) / (totalNewEnrollments[0].total || 1) * 100;
+  res.status(200).json({attritionRate});
+});
+
 app.get("/admissions", async (req, res) => {
   if(!db){
     return res.status(500).send("Database connection error");
