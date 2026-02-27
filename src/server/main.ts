@@ -4,6 +4,8 @@ import * as dotenv from "dotenv"
 import {Db, MongoClient, ServerApiVersion} from "mongodb";
 import {auth} from "express-openid-connect"
 import {requireAdmin, requireAuth} from "../middleware/auth.js";
+import {setDb} from "./chatbot-ai.js";
+import chatbotAi from "./chatbot-ai.js";
 
 const app = express();
 dotenv.config();
@@ -35,6 +37,7 @@ app.use(express.json());
 app.use(auth(config));
 app.use("/", requireAuth); // get/post is always protected by being logged in. If not logged in, users are redirected to login page
 app.use("/admin", requireAdmin); // get/post path should be /admin/xxx if the route should only be accessed my admins
+app.use("/", chatbotAi);
 
 let db: Db | undefined = undefined;
 
@@ -839,7 +842,7 @@ app.get("/api/employee-data", async (req, res) => {
 ViteExpress.listen(app, 3000, async () => {
   await client.connect();
   console.log('Connected to MongoDB');
-
   db = client.db("School-Benchmark");
+  setDb(db)
   console.log("Server is listening on port 3000...");
 });
