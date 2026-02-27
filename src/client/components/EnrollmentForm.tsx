@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import TooltipInput from './TooltipInput';
+import { Tooltip } from 'flowbite-react';
 import { useSchoolDataForm } from '../hooks/useSchoolDataForm';
 import { DropdownSection } from './DropdownSection';
+import ValidatedNumberInput from "./ValidatedNumberInput";
 
 const ENROLLMENT_FIELDS = [
     { name: 'STUDENTS_ADDED_DURING_YEAR', label: 'Students Added During Year', tooltip: 'The number of students added to the school this year.', required: false },
@@ -12,10 +13,21 @@ const ENROLLMENT_FIELDS = [
     { name: 'EXCH_STUD_REPS', label: 'Exchange Students', tooltip: 'The number of exchange students at the school this year.', required: false }
 ] as const;
 
+const ENROLLMENT_FIELDS_SOC = [
+    { name: 'STUDENTS_ADDED_DURING_YEAR_SOC', label: 'Students Added (SOC)', tooltip: 'The number of students of color added to the school this year.', required: false },
+    { name: 'STUDENTS_GRADUATED_SOC', label: 'Students Graduated (SOC)', tooltip: 'The number of students of color that graduated this year.', required: false },
+    { name: 'STUD_DISS_WTHD_SOC', label: 'Students Dismissed/Withdrawn (SOC)', tooltip: 'The number of students of color that were dismissed or withdrew this year.', required: false },
+    { name: 'STUD_NOT_RETURN_SOC', label: 'Students Who Chose Not to Return (SOC)', tooltip: 'The number of students of color that chose not to return to school this year.', required: false },
+    { name: 'STUD_NOT_INV_SOC', label: 'Students Not Invited to Return (SOC)', tooltip: 'The number of students of color that were not invited to return this year.', required: false },
+    { name: 'EXCH_STUD_REPS_SOC', label: 'Exchange Students (SOC)', tooltip: 'The number of exchange students of color at the school this year.', required: false }
+] as const;
+
+const ALL_FIELDS = [...ENROLLMENT_FIELDS, ...ENROLLMENT_FIELDS_SOC];
+
 const INITIAL_FORM_STATE = {
     SCHOOL_YR_ID: "",
     GRADE_DEF_ID: "",
-    ...Object.fromEntries(ENROLLMENT_FIELDS.map(field => [field.name, ""]))
+    ...Object.fromEntries(ALL_FIELDS.map(field => [field.name, ""]))
 };
 
 export default function EnrollmentForm() {
@@ -39,7 +51,7 @@ export default function EnrollmentForm() {
                     setFormData(prev => ({
                         ...prev,
                         ...Object.fromEntries(
-                            ENROLLMENT_FIELDS.map(field => [field.name, data[field.name] || ""])
+                            ALL_FIELDS.map(field => [field.name, data[field.name] ?? ""])
                         )
                     }));
                 }
@@ -69,25 +81,11 @@ export default function EnrollmentForm() {
 
     //Validation function to check if form has errors
     const hasValidationErrors = () => {
-        for (const field of ENROLLMENT_FIELDS) {
+        for (const field of ALL_FIELDS) {
             const value = formData[field.name as keyof typeof formData];
             if (!value || value === "") continue;
 
-            //Check for non-numeric characters
-            if (/[^0-9.\-]/.test(value) || /[a-zA-Z]/.test(value)) return true;
-
-            //Check for multiple minus signs or minus not at start
-            const minusCount = (value.match(/-/g) || []).length;
-            if (minusCount > 1 || (minusCount === 1 && !value.startsWith('-'))) return true;
-
-            //Check for negative numbers
-            if (value.startsWith('-')) return true;
-
-            //Check for decimals
-            if (value.includes('.')) return true;
-
-            //Check if valid number
-            if (isNaN(parseFloat(value))) return true;
+            if (/[^0-9]/.test(value)) return true;
         }
         return false;
     };
@@ -108,6 +106,28 @@ export default function EnrollmentForm() {
             setFormData(INITIAL_FORM_STATE);
         }
     };
+
+    //Group fields into sections for rendering
+    const ADDITIONS_GRADUATIONS_FIELDS = [ENROLLMENT_FIELDS[0], ENROLLMENT_FIELDS[1], ENROLLMENT_FIELDS[5]];
+    const ADDITIONS_GRADUATIONS_SOC = [ENROLLMENT_FIELDS_SOC[0], ENROLLMENT_FIELDS_SOC[1], ENROLLMENT_FIELDS_SOC[5]];
+
+    const ATTRITION_FIELDS = [ENROLLMENT_FIELDS[2], ENROLLMENT_FIELDS[3], ENROLLMENT_FIELDS[4]];
+    const ATTRITION_SOC = [ENROLLMENT_FIELDS_SOC[2], ENROLLMENT_FIELDS_SOC[3], ENROLLMENT_FIELDS_SOC[4]];
+
+    const FORM_SECTIONS = [
+        {
+            title: "Additions & Graduations",
+            description: "Students entering mid-year, graduating, or participating in exchange programs.",
+            fields: ADDITIONS_GRADUATIONS_FIELDS,
+            socFields: ADDITIONS_GRADUATIONS_SOC
+        },
+        {
+            title: "Attrition",
+            description: "Students leaving the school prior to graduation.",
+            fields: ATTRITION_FIELDS,
+            socFields: ATTRITION_SOC
+        }
+    ];
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -141,26 +161,76 @@ export default function EnrollmentForm() {
                 onChange={handleChange}
             />
 
-            {/* Repeated input fields */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {ENROLLMENT_FIELDS.map((field) => (
-                    <TooltipInput
-                        key={field.name}
-                        label={field.label}
-                        tooltipText={field.tooltip}
-                        name={field.name}
-                        value={formData[field.name as keyof typeof formData]}
-                        onChange={handleChange}
-                        required={field.required}
-                    />
-                ))}
-            </div>
+            {FORM_SECTIONS.map((section, sectionIndex) => (
+                <div key={sectionIndex} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="space-y-4 pt-4">
 
-            <div className="flex justify-end pt-4">
+                        {/* Section title and description */}
+                        <div className="px-4">
+                            <h3 className="text-lg font-semibold text-[#1E3869]">{section.title}</h3>
+                            <p className="text-sm text-gray-500">{section.description}</p>
+                        </div>
+
+                        {/* Column Headers */}
+                        <div className="hidden md:grid grid-cols-12 gap-6 px-4 text-sm font-semibold text-gray-600 uppercase tracking-wider">
+                            <div className="col-span-4">Metric</div>
+                            <div className="col-span-4">Non-Students of Color (SOC)</div>
+                            <div className="col-span-4">Students of Color (SOC)</div>
+                        </div>
+
+                        {/* Render rows in cards */}
+                        <div className="bg-white rounded-lg border-t border-gray-200 overflow-hidden">
+                            {section.fields.map((field, index) => {
+                                const socField = section.socFields[index];
+                                return (
+                                    <div key={field.name} className="grid grid-cols-1 md:grid-cols-12 gap-6 p-4 bg-gray-50/50 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors items-center">
+
+                                        {/* Row label */}
+                                        <div className="col-span-1 md:col-span-4 flex items-center gap-2">
+                                            <label className="text-sm font-semibold text-gray-800">{field.label}</label>
+                                            <Tooltip content={field.tooltip} placement="top" style="light" arrow={false}>
+                                                <svg width="18px" height="18px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="cursor-help">
+                                                    <circle cx="12" cy="11.9999" r="9" stroke="#292929" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                    <rect x="12" y="8" width="0.01" height="0.01" stroke="#292929" strokeWidth="3.75" strokeLinejoin="round" />
+                                                    <path d="M12 12V16" stroke="#292929" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                </svg>
+                                            </Tooltip>
+                                        </div>
+
+                                        {/* Non-SOC input */}
+                                        <div className="col-span-1 md:col-span-4">
+                                            <ValidatedNumberInput
+                                                label="Non-SOC"
+                                                name={field.name}
+                                                value={formData[field.name as keyof typeof formData]}
+                                                onChange={handleChange}
+                                                required={field.required}
+                                            />
+                                        </div>
+
+                                        {/* SOC input */}
+                                        <div className="col-span-1 md:col-span-4">
+                                            <ValidatedNumberInput
+                                                label="SOC"
+                                                name={socField.name}
+                                                value={formData[socField.name as keyof typeof formData]}
+                                                onChange={handleChange}
+                                                required={socField.required}
+                                            />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            ))}
+
+            <div className="flex justify-end pt-6">
                 <button
                     type="submit"
                     disabled={loading}
-                    className="bg-[#0693E3] text-white px-6 py-2 rounded font-semibold hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-[#0693E3] text-white px-8 py-3 rounded font-semibold hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                     {loading ? 'Saving...' : 'Save Enrollment Data'}
                 </button>

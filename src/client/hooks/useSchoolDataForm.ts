@@ -48,10 +48,15 @@ export function useSchoolDataForm({ endpoint, dataEndpoint }: UseSchoolDataFormP
     };
 
     //Fetch autofill data
-    const fetchAutofillData = (yearId: string, gradeId: string) => {
-        if (!yearId || !gradeId) return Promise.resolve(null);
+    const fetchAutofillData = (yearId: string, gradeId?: string) => {
+        if (!yearId) return Promise.resolve(null);
 
-        return fetch(`${dataEndpoint}?yearId=${yearId}&gradeId=${gradeId}`)
+        //If gradeId is provided, append it to the query, otherwise just send yearId
+        const url = gradeId
+            ? `${dataEndpoint}?yearId=${yearId}&gradeId=${gradeId}`
+            : `${dataEndpoint}?yearId=${yearId}`;
+
+        return fetch(url)
             .then(res => res.json())
             .catch(err => {
                 console.error("Failed to fetch autofill data:", err);
