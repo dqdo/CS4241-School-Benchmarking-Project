@@ -1,18 +1,25 @@
 import { GoogleGenAI } from "@google/genai";
+import { Ollama } from "ollama";
 import { Router } from "express";
 import { Db } from "mongodb";
 import fs from "fs";
-
+import * as dotenv from "dotenv";
+dotenv.config();
 const router = Router();
 
 // Load AI prompt configurations from JSON file containing rules, guidelines, and examples for different user types
 const configPrompts = JSON.parse(fs.readFileSync("./src/server/prompt-config.json", "utf8"));
 
-// AI provider configuration - supports both Ollama (local) and Gemini (cloud) models
+// AI provider configuration - supports both Ollama (cloud) and Gemini (cloud) models
 const AI_PROVIDER: "gemini" | "ollama" = "ollama";
-const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://localhost:11434";
-const OLLAMA_MODEL = "gpt-oss:120b-cloud";
+const OLLAMA_MODEL = "gpt-oss:120b";
 const MAX_RETRY_ATTEMPTS = 3; // Maximum number of query retry attempts
+const ollama = new Ollama({
+    host: "https://ollama.com",
+    headers: {
+        Authorization: "Bearer " + process.env.OLLAMA_API_KEY,
+    },
+});
 
 let db: Db | undefined;
 
@@ -104,38 +111,22 @@ async function buildQueryPrompt(basePrompt: string): Promise<string> {
 }
 
 // Make a single-turn AI request with system prompt and user message
-// Supports both Ollama (local) and Gemini (cloud) providers
+// Supports both Ollama (cloud) and Gemini (cloud) providers
 async function callAI(systemPrompt: string, userMessage: string): Promise<string> {
     if (AI_PROVIDER === "ollama") {
-        const response = await fetch(`${OLLAMA_URL}/v1/chat/completions`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                model: OLLAMA_MODEL,
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: userMessage },
-                ],
-            }),
+        const response = await ollama.chat({
+            model: OLLAMA_MODEL,
+            stream: false,
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userMessage },
+            ],
         });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Ollama error: ${response.status} ${errorText}`);
-        }
-
-        const data = (await response.json()) as { choices: { message: { content: string } }[] };
-
-        // Check if we got a valid response with content
-        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-            throw new Error(`Ollama returned invalid response structure: ${JSON.stringify(data)}`);
-        }
-
-        const content = data.choices[0].message.content;
+        const content = response.message.content;
         if (!content || content.trim().length === 0) {
             console.warn("[callAI] Ollama returned empty content");
         }
-
         return content;
     }
 
@@ -162,14 +153,14 @@ async function callAIWithHistory(systemPrompt: string, history: any[], message: 
                 : []),
             { role: "user", content: message },
         ];
-        const response = await fetch(`${OLLAMA_URL}/v1/chat/completions`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ model: OLLAMA_MODEL, messages }),
+
+        const response = await ollama.chat({
+            model: OLLAMA_MODEL,
+            stream: false,
+            messages,
         });
-        if (!response.ok) throw new Error(`Ollama error: ${response.status}`);
-        const data = (await response.json()) as { choices: { message: { content: string } }[] };
-        return data.choices[0].message.content;
+
+        return response.message.content;
     }
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -338,7 +329,6 @@ Validate whether the answer correctly interprets the data.
         const rawResponse = await callAI(validatorPrompt, validationMessage);
         console.log("[validateAnswer] AI response:\n", rawResponse);
 
-        // Check if we got an empty or invalid response
         if (!rawResponse || rawResponse.trim().length === 0) {
             console.warn("[validateAnswer] Received empty response from AI validator");
             return {
@@ -453,7 +443,6 @@ async function answerWithData(
         console.log(`[answerWithData] Query attempt ${attempt}/${MAX_RETRY_ATTEMPTS}`);
 
         try {
-            // Generate query (with context from previous failure if retrying)
             const previousAttempt = queryError && queryPlan
                 ? { queryPlan, error: queryError }
                 : undefined;
@@ -466,13 +455,11 @@ async function answerWithData(
                 return { reply, queryPlan: null };
             }
 
-            // Execute query
             console.log(`[executeQuery] Collection: "${queryPlan.collection}" Operation: "${queryPlan.operation}"`);
             const raw = await executeQuery(queryPlan);
             results = sanitiseResults(raw);
             console.log(`[executeQuery] Returned ${results.length} document(s)`);
 
-            // Query succeeded, break out of retry loop
             queryError = null;
             break;
 
@@ -480,7 +467,6 @@ async function answerWithData(
             queryError = err?.message ?? "Unknown error";
             console.error(`[executeQuery] Attempt ${attempt} failed:`, queryError);
 
-            // If this was the last attempt, we'll handle the error below
             if (attempt >= MAX_RETRY_ATTEMPTS) {
                 console.error("[executeQuery] Max retry attempts reached");
             }
@@ -495,7 +481,6 @@ async function answerWithData(
                 : "However, I was able to retrieve some partial results."
         }`;
 
-        // If we have partial results, try to interpret them anyway
         if (results.length > 0) {
             const dataContext = `Query results (${results.length} record${results.length === 1 ? "" : "s"}):\n${JSON.stringify(results, null, 2)}`;
             const interpreterMessage = `User question: ${question}\n\n${dataContext}\n\nNote: This data may be incomplete due to query issues.`;
@@ -535,19 +520,16 @@ async function answerWithData(
         if (!validation.isValid) {
             console.log(`[answerWithData] Answer validation failed (attempt ${validationAttempt + 1}/${MAX_RETRY_ATTEMPTS}), attempting to regenerate query`);
 
-            // Store the suggested fix in the query plan for the retry
             if (validation.suggestedFix && queryPlan) {
                 (queryPlan as any).suggestedFix = validation.suggestedFix;
             }
 
-            // Recursive call with incremented validation attempt counter
             return answerWithData(question, history, isAdmin, validationAttempt + 1);
         }
 
         console.log(`[answerWithData] Final answer generated (valid=${validation.isValid})`);
         return { reply, queryPlan, validation };
     } else {
-        // Max validation attempts reached, return answer anyway with a warning
         console.log(`[answerWithData] Max validation attempts (${MAX_RETRY_ATTEMPTS}) reached, accepting answer despite validation concerns`);
         const validation: ValidationResult = {
             isValid: false,

@@ -17,6 +17,7 @@
     "express-openid-connect": "^2.19.4",
     "flowbite-react": "^0.12.17",
     "mongodb": "^7.1.0",
+    "ollama": "^0.6.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "tailwindcss": "^4.2.0",
