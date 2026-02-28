@@ -409,8 +409,9 @@ ${previousAttempt.queryPlan.suggestedFix || "Try a different collection, operati
 }
 
 // Main pipeline: Orchestrates the entire question-answering process with retry and validation logic
-// Steps: 1) Classify question, 2) Generate and execute query with retries, 3) Handle errors/empty results,
-// 4) Generate answer from results, 5) Validate answer accuracy, 6) Retry if validation fails
+// Steps: 1) Classify question, 2) Generate and execute query with retries (including empty results),
+// 3) Handle errors/empty results after all retries, 4) Generate answer from results,
+// 5) Validate answer accuracy, 6) Retry if validation fails
 async function answerWithData(
     question: string,
     history: any[],
@@ -432,7 +433,7 @@ async function answerWithData(
         return { reply, queryPlan: null };
     }
 
-    // STEP 2: Generate and execute query (with retry logic)
+    // STEP 2: Generate and execute query (with retry logic for both errors AND empty results)
     let queryPlan: QueryPlan | null = null;
     let results: any[] = [];
     let queryError: string | null = null;
@@ -443,8 +444,11 @@ async function answerWithData(
         console.log(`[answerWithData] Query attempt ${attempt}/${MAX_RETRY_ATTEMPTS}`);
 
         try {
-            const previousAttempt = queryError && queryPlan
-                ? { queryPlan, error: queryError }
+            const previousAttempt = (queryError || results.length === 0) && queryPlan
+                ? {
+                    queryPlan,
+                    error: queryError ?? `Query returned 0 results. Try a different approach — for example, loosening filters, checking field names, or trying a simpler pipeline.`,
+                }
                 : undefined;
 
             queryPlan = await generateQueryWithRetry(question, history, isAdmin, previousAttempt);
@@ -460,8 +464,13 @@ async function answerWithData(
             results = sanitiseResults(raw);
             console.log(`[executeQuery] Returned ${results.length} document(s)`);
 
-            queryError = null;
-            break;
+            // Only break out of the retry loop if we actually got results
+            if (results.length > 0) {
+                queryError = null;
+                break;
+            }
+
+            console.log(`[answerWithData] Attempt ${attempt} returned 0 results, retrying with different query...`);
 
         } catch (err: any) {
             queryError = err?.message ?? "Unknown error";
@@ -491,11 +500,11 @@ async function answerWithData(
         return { reply: errorMessage, queryPlan };
     }
 
-    // STEP 4: Check if no results were found
+    // STEP 4: Check if no results were found after all retries
     if (results.length === 0) {
         const reply = await callAI(
             interpreterSystemPrompt,
-            `User question: ${question}\n\nThe query returned no results. Let the user know nothing was found and suggest why that might be (e.g., school name spelled incorrectly, no data for that year, etc.).`
+            `User question: ${question}\n\nAll ${MAX_RETRY_ATTEMPTS} query attempts returned no results. Let the user know nothing was found and suggest why that might be (e.g., school name spelled incorrectly, no data for that year, grade level name may differ in the database, etc.).`
         );
         return { reply, queryPlan };
     }
