@@ -23,17 +23,17 @@ export default function EnrollmentKPIs(props: EnrollmentKPIsProps) {
     return (
         <div className="flex flex-wrap justify-center gap-6 p-4">
             <div className="cursor-default flex flex-col items-center justify-center bg-[#0A3E6C] text-white rounded-2xl shadow-2xl w-48 h-48 hover:bg-[#0066CC] hover:scale-105 transition-all duration-300">
-                <h1 className="text-xl font-semibold mb-2">Acceptance Rate</h1>
+                <h1 className="text-xl text-center font-semibold mb-2">Overall Acceptance Rate</h1>
                 <h2 className="text-3xl font-bold">{acceptanceRate.toFixed(2)}%</h2>
             </div>
 
             <div className="cursor-default flex flex-col items-center justify-center bg-[#0A3E6C] text-white rounded-2xl shadow-2xl w-48 h-48 hover:bg-[#0066CC] hover:scale-105 transition-all duration-300">
-                <h1 className="text-xl font-semibold mb-2">Yield</h1>
+                <h1 className="text-xl text-center font-semibold mb-2">Overall Yield</h1>
                 <h2 className="text-3xl font-bold">{_yield.toFixed(2)}%</h2>
             </div>
 
             <div className="cursor-default flex flex-col items-center justify-center bg-[#0A3E6C] text-white rounded-2xl shadow-2xl w-48 h-48 hover:bg-[#0066CC] hover:scale-105 transition-all duration-300">
-                <h1 className="text-xl font-semibold mb-2">Attrition</h1>
+                <h1 className="text-xl text-center font-semibold mb-2">Overall Attrition</h1>
                 <h2 className="text-3xl font-bold">{attrition.toFixed(2)}%</h2>
             </div>
         </div>

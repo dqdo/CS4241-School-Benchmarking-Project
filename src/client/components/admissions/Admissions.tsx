@@ -3,6 +3,7 @@ import {useEffect, useState} from "react";
 import Button from "../../elements/Button";
 import AdmissionsCompare from "./AdmissionsCompare";
 import SchoolSelector from "../../elements/SchoolSelector";
+import Graph, {GraphData} from "../../elements/Graph";
 
 export type Grade = {
     ID: number;
@@ -20,9 +21,39 @@ export type Year = {
 }
 
 const GraphSection = (props: {graphProps: any, compare:(label: string) => void, label:string}) => {
+
+    async function fetchAdmissions() {
+        if(!props.graphProps.selectedSchool){
+            return [];
+        }
+        if(!props.graphProps.selectedYear && !props.graphProps.selectedGrade){
+            return [];
+        }
+
+        const params = {
+            school: props.graphProps.selectedSchool,
+            year: props.graphProps.selectedYear,
+            grade: props.graphProps.selectedGrade,
+            field: props.label.toUpperCase()
+        };
+        const queryString = new URLSearchParams(params).toString();
+        const data = await (await fetch("/admissions?" + queryString)).json();
+        let output:GraphData[] = [];
+        if(props.graphProps.selectedGrade){
+            output = data.map((row: {DATA: number, DESCRIPTION: string, YEAR: number}): GraphData => {
+                return {x: row.YEAR, y: row.DATA}
+            });
+        }else{
+            output = data.map((row: {DATA: number, DESCRIPTION: string, YEAR: number}): GraphData => {
+                return {x: row.DESCRIPTION, y: row.DATA}
+            });
+        }
+        return output;
+    }
+
     return (
         <div className={"border-2 border-[#0A3E6C]"}>
-            <AdmissionsGraph label={props.label} {...props.graphProps} />
+            <Graph label={props.label} {...props.graphProps} fetchData={fetchAdmissions}  />
             <div className={"flex space-x-2"}>
                 <Button onClick={() => props.compare(props.label)} buttonText={"Compare"} />
             </div>
@@ -40,7 +71,7 @@ export default function Admissions() {
     // Dropdowns
     const [schoolSelection, setSchoolSelection] = useState<string>("");
     const [yearSelection, setYearSelection] = useState<string>("");
-    const [gradeSelection, setGradeSelection] = useState<string>("None");
+    const [gradeSelection, setGradeSelection] = useState<string>("");
     const [chartType, setChartType] = useState<string>("bar");
 
     // Comparing flags

@@ -104,6 +104,58 @@ app.get("/acceptanceRate", async (req, res) => {
     res.status(200).json({acceptanceRate});
 });
 
+
+app.get("/acceptanceRateG", async (req, res) => {
+  if(!db){
+    return res.status(500).send("Database connection error");
+  }
+  const school = req.query.school ? Number(req.query.school) : undefined;
+  const grade = req.query.grade ? Number(req.query.grade) : undefined;
+  const data = await db.collection("AdmissionActivity").aggregate([
+    {
+      $match: { SCHOOL_ID: school, GRADE_DEF_ID: grade }
+    },
+    {
+      $lookup: {
+        from: "SchoolYear",
+        localField: "SCHOOL_YR_ID",
+        foreignField: "ID",
+        as: "year"
+      }
+    },
+    { $unwind: "$year" },
+    { $sort: {"year.ID": 1} },
+    {
+      $project: {
+        _id: false,
+        COMPLETED_APPLICATION_TOTAL: true,
+        ACCEPTANCES_TOTAL: true,
+        year: "$year.SCHOOL_YEAR",
+        acceptanceRate: {
+          $cond: [ // don't divide by 0
+            { $eq: ["$COMPLETED_APPLICATION_TOTAL", 0] },
+            0,
+            {
+              $multiply: [
+                {   $divide: [
+                    "$ACCEPTANCES_TOTAL",
+                    "$COMPLETED_APPLICATION_TOTAL"
+                  ]
+                },
+                  100
+              ]
+
+            }
+          ]
+        }
+      }
+    }
+  ]).toArray();
+
+  res.status(200).json(data);
+});
+
+
 app.get("/yield", async (req, res) => {
     if(!db){
         return res.status(500).send("Database connection error");
@@ -285,7 +337,6 @@ app.get("/admissions", async (req, res) => {
   const year = req.query.year ? Number(req.query.year) : undefined;
   const field = req.query.field ? req.query.field : undefined;
   const grade = req.query.grade ? Number(req.query.grade) : undefined;
-
   let projection = {};
   let filter = {};
   if(grade){
