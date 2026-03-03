@@ -24,22 +24,22 @@ export default function EmployeeRatioKPIs(props: EmployeeRatioKPIsProps) {
 
     return (
         <div className="flex flex-wrap justify-center gap-6 p-4">
-            <div className="cursor-default flex flex-col items-center justify-center bg-[#0693E3] text-white rounded-2xl shadow-2xl w-48 h-48 hover:scale-105 transition-transform duration-300">
+            <div className="cursor-default flex flex-col items-center justify-center bg-[#0A3E6C] text-white rounded-2xl shadow-2xl w-48 h-48 hover:bg-[#0066CC] hover:scale-105 transition-all duration-300">
                 <h1 className="text-xl font-semibold mb-2">Students / Teacher</h1>
                 <h2 className="text-3xl font-bold">{studentsPerTeacher.toFixed(2)}</h2>
             </div>
 
-            <div className="cursor-default flex flex-col items-center justify-center bg-[#0693E3] text-white rounded-2xl shadow-2xl w-48 h-48 hover:scale-105 transition-transform duration-300">
+            <div className="cursor-default flex flex-col items-center justify-center bg-[#0A3E6C] text-white rounded-2xl shadow-2xl w-48 h-48 hover:bg-[#0066CC] hover:scale-105 transition-all duration-300">
                 <h1 className="text-xl font-semibold mb-2">Teacher FTE / 1000 Students</h1>
                 <h2 className="text-3xl font-bold">{teacherFTEPer1000.toFixed(2)}</h2>
             </div>
 
-            <div className="cursor-default flex flex-col items-center justify-center bg-[#0693E3] text-white rounded-2xl shadow-2xl w-48 h-48 hover:scale-105 transition-transform duration-300">
+            <div className="cursor-default flex flex-col items-center justify-center bg-[#0A3E6C] text-white rounded-2xl shadow-2xl w-48 h-48 hover:bg-[#0066CC] hover:scale-105 transition-all duration-300">
                 <h1 className="text-xl font-semibold mb-2">Admins per 1000 Students</h1>
                 <h2 className="text-3xl font-bold">{adminsPer1000.toFixed(2)}</h2>
             </div>
 
-            <div className="cursor-default flex flex-col items-center justify-center bg-[#0693E3] text-white rounded-2xl shadow-2xl w-48 h-48 hover:scale-105 transition-transform duration-300">
+            <div className="cursor-default flex flex-col items-center justify-center bg-[#0A3E6C] text-white rounded-2xl shadow-2xl w-48 h-48 hover:bg-[#0066CC] hover:scale-105 transition-all duration-300">
                 <h1 className="text-xl font-semibold mb-2">Employees per 1000 Students</h1>
                 <h2 className="text-3xl font-bold">{employeesPer1000.toFixed(2)}</h2>
             </div>

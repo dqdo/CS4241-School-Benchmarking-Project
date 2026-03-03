@@ -39,6 +39,7 @@ app.use("/", requireAuth); // get/post is always protected by being logged in. I
 app.use("/admin", requireAdmin); // get/post path should be /admin/xxx if the route should only be accessed my admins
 app.use("/", chatbotAi);
 
+const SCHOOL_NAMESPACE = "https://cs4241-school-benchmarking-project-1.onrender.com/schoolId";
 let db: Db | undefined = undefined;
 
 /*
@@ -50,6 +51,24 @@ let db: Db | undefined = undefined;
 app.get("/currentUser", (req, res) => {
     const user = req.oidc.user;
     res.status(200).json({email: user?.email });
+});
+
+app.get("/usersSchool", async (req, res) => {
+  const user = req.oidc.user;
+  if(!user || !db) {
+    return res.status(404).json({message: "User not found"});
+  }
+  const schoolId: string = user[SCHOOL_NAMESPACE] || "";
+  let data;
+  if(schoolId !== "Admin") {
+    data = await db.collection("School").findOne(
+        {ID: schoolId},
+        {projection: {_id: false, ID: true, NAME_TX: true}}
+    );
+  }else{
+    data = {ID: -1, NAME_TX: "Admin"};
+  }
+  return res.status(200).json(data);
 });
 
 app.get("/acceptanceRate", async (req, res) => {
@@ -256,53 +275,68 @@ app.get("/employeesPer1000", async (req, res) => {
 });
 
 app.get("/admissions", async (req, res) => {
-  if(!db){
+  if(!db || !req.oidc.user){
     return res.status(500).send("Database connection error");
   }
-  const school = req.query.school ? Number(req.query.school) : undefined;
+
+  const schoolId: string = req.oidc.user[SCHOOL_NAMESPACE] || "";
+  const school = schoolId == "Admin" ? Number(req.query.school) : Number(schoolId);
+
   const year = req.query.year ? Number(req.query.year) : undefined;
   const field = req.query.field ? req.query.field : undefined;
+  const grade = req.query.grade ? Number(req.query.grade) : undefined;
 
   let projection = {};
-
+  let filter = {};
+  if(grade){
+    filter = {
+      SCHOOL_ID: school,
+      GRADE_DEF_ID: grade,
+    }
+  }else{
+    filter = {
+      SCHOOL_ID: school,
+      SCHOOL_YR_ID: year,
+    }
+  }
   switch (field) {
     case "ACCEPTANCES":
       projection = {
         _id: 0,
         DATA: "$ACCEPTANCES_TOTAL",
-        DESCRIPTION: "$grade.DESCRIPTION_TX"
+        DESCRIPTION: "$grade.DESCRIPTION_TX",
+        YEAR: "$year.SCHOOL_YEAR"
       }
       break;
     case "ENROLLMENTS":
       projection = {
         _id: 0,
         DATA: "$NEW_ENROLLMENTS_TOTAL",
-        DESCRIPTION: "$grade.DESCRIPTION_TX"
+        DESCRIPTION: "$grade.DESCRIPTION_TX",
+        YEAR: "$year.SCHOOL_YEAR"
       }
       break;
     case "ENROLL CAPACITY":
       projection = {
         _id: 0,
         DATA: "$CAPACITY_ENROLL",
-        DESCRIPTION: "$grade.DESCRIPTION_TX"
+        DESCRIPTION: "$grade.DESCRIPTION_TX",
+        YEAR: "$year.SCHOOL_YEAR"
       }
       break;
     case "COMPLETED APPLICATION":
       projection = {
         _id: 0,
         DATA: "$COMPLETED_APPLICATION_TOTAL",
-        DESCRIPTION: "$grade.DESCRIPTION_TX"
+        DESCRIPTION: "$grade.DESCRIPTION_TX",
+        YEAR: "$year.SCHOOL_YEAR"
       }
       break;
   }
 
   const data = await db.collection("AdmissionActivity").aggregate([
-    {
-      $match: {
-        SCHOOL_ID: school,
-        SCHOOL_YR_ID: year
-      }
-    },
+    { $match: filter },
+
     {
       $lookup: {
         from: "GradeDefinitions",
@@ -312,16 +346,22 @@ app.get("/admissions", async (req, res) => {
       }
     },
     {
-      $unwind: "$grade"
+      $lookup: {
+        from: "SchoolYear",
+        localField: "SCHOOL_YR_ID",
+        foreignField: "ID",
+        as: "year"
+      }
     },
-    {
-      $sort: { "grade.ID": 1 }
-    },
-    {
-      $project: projection
-    }
-  ]).toArray();
 
+    { $unwind: "$grade" },
+    { $unwind: "$year" },
+
+    { $sort: grade ? {"year.ID": 1} : { "grade.ID": 1 } },
+
+    { $project: projection }
+
+  ]).toArray();
   return res.status(200).json(data);
 })
 
@@ -382,13 +422,26 @@ app.get("/enrollment-attrition", async (req, res) => {
 });
 
 app.get("/schools", async (req, res) => {
-  if(!db)
+  if(!db || !req.oidc.user)
     return res.status(500).send("Database connection error");
 
+  const schoolId: string = req.oidc.user[SCHOOL_NAMESPACE] || "";
+
   const data = await db.collection("School").find(
-      {},
+      schoolId == "Admin" ? {} : {ID: schoolId},
       { projection: { _id: false, ID: true, NAME_TX: true } }
   ).toArray();
+  return res.status(200).json(data);
+});
+
+app.get("/grades", async (req, res) => {
+  if(!db || !req.oidc.user)
+    return res.status(500).send("Database connection error");
+
+  const data = await db.collection("GradeDefinitions").find(
+      {},
+      { projection: { _id: false, ID: true, DESCRIPTION_TX: true } }
+  ).sort({ID: 1}).toArray();
   return res.status(200).json(data);
 });
 

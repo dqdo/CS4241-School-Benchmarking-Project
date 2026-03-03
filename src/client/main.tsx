@@ -10,7 +10,7 @@ import ChatWindow from "./components/ChatWindow";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
-        <div className={"sticky top-0"}>
+        <div className={"sticky top-0 z-10"}>
             <NavBar/>
         </div>
         <App/>
