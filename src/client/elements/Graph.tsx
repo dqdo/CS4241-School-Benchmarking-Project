@@ -1,99 +1,113 @@
 "use client";
 
-import {useEffect, useRef, useState} from "react";
-import Chart, {ChartData, ChartOptions, ChartType} from 'chart.js/auto';
-import {Grade, School, Year} from "../components/admissions/Admissions";
+import { useEffect, useRef } from "react";
+import Chart, { ChartData, ChartOptions, ChartDataset } from 'chart.js/auto';
+
+export type GraphData = {
+    x: string | number;
+    y: number;
+};
 
 export type GraphProps = {
     label: string;
     chartType: "doughnut" | "bar" | "pie" | "line";
-    schools: School[];
-    years: Year[];
-    grades: Grade[];
-    userSchool: School;
-    fetchData: (label: string) => Promise<GraphData[]>;
-
-    selectedSchool: string;
-    selectedYear: string;
-    selectedGrade: string;
-
+    data: GraphData[];
+    secondaryLabel?: string;
+    secondaryData?: GraphData[];
+    secondaryChartType?: "bar" | "line";
 }
 
-export type GraphData = {
-    x: any;
-    y: any;
-};
+const CHART_COLORS = [
+    "#0A3E6C", "#E03131", "#2B8A3E", "#F59E0B", "#862E9C",
+    "#1C7ED6", "#0CA678", "#D9480F", "#D6336C", "#74B816",
+    "#5F3DC4", "#F08C00", "#C2255C", "#1098AD"
+];
 
 export default function Graph(props: GraphProps) {
+    const {
+        label, chartType, data, secondaryLabel, secondaryData = [], secondaryChartType
+    } = props;
 
-    // ChartJs Refs
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const chartRef = useRef<Chart | null>(null);
 
-    // Chart Data
-    const [graphData, setGraphData] = useState<GraphData[]>([]);
-
-    // Colors for charts
-    const colors = [
-        "#0A3E6C", // primary dark blue
-        "#0066CC", // accent blue
-        "#1A5FA8", // medium blue
-        "#0D5290", // slightly darker
-        "#2A73C2", // lighter blue
-        "#5390FF", // bright blue
-        "#3E7CB1", // muted blue
-        "#1F4E79", // navy shade
-        "#6699CC", // soft blue
-        "#AEC6E8", // pastel blue
-        "#3B82C4", // extra blue 1
-        "#60A5FA", // extra blue 2
-        "#1C4F9C", // extra blue 3
-        "#0E3B73"  // extra blue 4
-    ];
-
-    // Fetch admission data when year, grade, school or chart type changes
     useEffect(() => {
-        props.fetchData(props.label).then(data => setGraphData(data));
-    }, [props.selectedSchool, props.selectedYear, props.selectedGrade]);
+        if (!canvasRef.current) return;
 
-    useEffect(() => {
-        let isMounted = true;
-        if (!isMounted || !canvasRef.current) return;
-        // Destroy previous chart if exists
-        if (chartRef.current) chartRef.current.destroy();
+        // Clean up previous chart instance before rendering a new one
+        if (chartRef.current) {
+            chartRef.current.destroy();
+        }
 
-        const chartData: ChartData<ChartType, number[], string> = {
-            labels: graphData.map((row) => row.x),
-            datasets: [
-                {
-                    label: props.label,
-                    data: graphData.map((row) => row.y),
-                    backgroundColor: colors,
-                },
-            ],
+        const isDualAxis = secondaryData.length > 0 && (chartType === 'line' || chartType === 'bar');
+
+        // Use ChartDataset type for proper TS support
+        const datasets: ChartDataset[] = [{
+            type: chartType,
+            label: label,
+            data: data.map(row => row.y),
+            // For line charts, use a single color. For bar/pie, use the palette.
+            backgroundColor: chartType === 'line' ? CHART_COLORS[0] : CHART_COLORS,
+            borderColor: chartType === 'line' ? CHART_COLORS[0] : CHART_COLORS,
+            borderWidth: chartType === 'line' ? 3 : 1,
+            yAxisID: isDualAxis ? 'y' : undefined,
+        }];
+
+        if (isDualAxis && secondaryLabel) {
+            datasets.push({
+                type: secondaryChartType || 'line',
+                label: secondaryLabel,
+                data: secondaryData.map(row => row.y),
+                backgroundColor: "#F59E0B",
+                borderColor: "#F59E0B",
+                borderWidth: 3,
+                yAxisID: 'y1',
+            });
+        }
+
+        const chartData: ChartData = {
+            labels: data.length > 0 ? data.map(row => row.x) : secondaryData.map(row => row.x),
+            datasets,
         };
 
-        const chartOptions: ChartOptions<ChartType> = {
+        const chartOptions: ChartOptions = {
             responsive: true,
-            plugins: { legend: { position: "top" }, tooltip: { enabled: true } },
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: "top" },
+                tooltip: { enabled: true }
+            },
+            scales: isDualAxis ? {
+                y: { type: 'linear', display: true, position: 'left' },
+                y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false } },
+            } : undefined
         };
 
         chartRef.current = new Chart(canvasRef.current, {
-            type: props.chartType,
+            type: chartType,
             data: chartData,
             options: chartOptions,
         });
 
+        // Cleanup on unmount
         return () => {
-            isMounted = false;
-            if (chartRef.current) chartRef.current.destroy();
+            if (chartRef.current) {
+                chartRef.current.destroy();
+            }
         };
-    }, [graphData, props.chartType]);
+    }, [data, secondaryData, chartType, secondaryChartType, label, secondaryLabel]);
+
+    const isCircularChart = chartType === 'pie' || chartType === 'doughnut';
+    const chartTitle = `${label} ${secondaryLabel && (chartType === 'line' || chartType === 'bar') ? ` vs ${secondaryLabel}` : ""}`;
 
     return (
-        <div className={"text-center"}>
-            <h1 className={"font-bold text-2xl"}>{props.label}</h1>
-            <canvas ref={canvasRef}></canvas>
+        <div className="text-center flex flex-col items-center w-full">
+            {chartTitle.trim() && (
+                <h1 className="font-bold text-2xl mb-4 text-[#1E3869]">{chartTitle}</h1>
+            )}
+            <div className={`w-full flex justify-center relative h-[400px] ${isCircularChart ? 'max-w-[65%] xl:max-w-[55%]' : ''}`}>
+                <canvas ref={canvasRef}></canvas>
+            </div>
         </div>
-    )
+    );
 }

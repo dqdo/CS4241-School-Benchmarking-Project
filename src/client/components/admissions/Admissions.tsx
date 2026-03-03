@@ -1,141 +1,158 @@
-import AdmissionsGraph from "./AdmissionsGraph";
-import {useEffect, useState} from "react";
+import { useEffect, useState } from "react";
 import Button from "../../elements/Button";
-import AdmissionsCompare from "./AdmissionsCompare";
-import SchoolSelector from "../../elements/SchoolSelector";
-import Graph, {GraphData} from "../../elements/Graph";
+import ButtonTab from "../../components/ButtonTab";
+import AdmissionGraphs from "./AdmissionGraphs";
 
-export type Grade = {
-    ID: number;
-    DESCRIPTION_TX: string;
-}
+export type Grade = { ID: number; DESCRIPTION_TX: string; }
+export type School = { NAME_TX: string; ID: number; }
+export type Year = { SCHOOL_YEAR: string; ID: number; }
 
-export type School = {
-    NAME_TX: string;
-    ID: number;
-}
-
-export type Year = {
-    SCHOOL_YEAR:string
-    ID: number
-}
-
-const GraphSection = (props: {graphProps: any, compare:(label: string) => void, label:string}) => {
-
-    async function fetchAdmissions() {
-        if(!props.graphProps.selectedSchool){
-            return [];
-        }
-        if(!props.graphProps.selectedYear && !props.graphProps.selectedGrade){
-            return [];
-        }
-
-        const params = {
-            school: props.graphProps.selectedSchool,
-            year: props.graphProps.selectedYear,
-            grade: props.graphProps.selectedGrade,
-            field: props.label.toUpperCase()
-        };
-        const queryString = new URLSearchParams(params).toString();
-        const data = await (await fetch("/admissions?" + queryString)).json();
-        let output:GraphData[] = [];
-        if(props.graphProps.selectedGrade){
-            output = data.map((row: {DATA: number, DESCRIPTION: string, YEAR: number}): GraphData => {
-                return {x: row.YEAR, y: row.DATA}
-            });
-        }else{
-            output = data.map((row: {DATA: number, DESCRIPTION: string, YEAR: number}): GraphData => {
-                return {x: row.DESCRIPTION, y: row.DATA}
-            });
-        }
-        return output;
-    }
-
-    return (
-        <div className={"border-2 border-[#0A3E6C]"}>
-            <Graph label={props.label} {...props.graphProps} fetchData={fetchAdmissions}  />
-            <div className={"flex space-x-2"}>
-                <Button onClick={() => props.compare(props.label)} buttonText={"Compare"} />
-            </div>
-        </div>
-    )
+export type ChartConfig = {
+    id: number;
+    schoolSelection: string;
+    yearSelection: string;
+    gradeSelection: string;
+    secondaryLabel: string;
+    chartType: string;
+    secondaryChartType: string;
 }
 
 export default function Admissions() {
-    // Stay unchanged after first fetch
     const [schools, setSchools] = useState<School[]>([]);
     const [years, setYears] = useState<Year[]>([]);
     const [grades, setGrades] = useState<Grade[]>([]);
-    const [userSchool, setUserSchool] = useState<School>({ID: -1, NAME_TX: "NONE"});
 
-    // Dropdowns
-    const [schoolSelection, setSchoolSelection] = useState<string>("");
-    const [yearSelection, setYearSelection] = useState<string>("");
-    const [gradeSelection, setGradeSelection] = useState<string>("");
-    const [chartType, setChartType] = useState<string>("bar");
+    const [activeTab, setActiveTab] = useState<string>("Acceptances");
 
-    // Comparing flags
-    const [isComparing, setIsComparing] = useState<boolean>(false);
-    const [compareType, setCompareType] = useState<string>("");
+    const [globalChartType, setGlobalChartType] = useState<string>("bar");
+    const [globalSecondaryChartType, setGlobalSecondaryChartType] = useState<string>("line");
 
-    const graphProps = {
-        chartType: chartType as "bar" | "doughnut" | "pie" | "line",
-        grades: grades,
-        schools: schools,
-        standalone: false,
-        userSchool: userSchool,
-        years: years,
-        selectedSchool: schoolSelection,
-        selectedYear: yearSelection,
-        selectedGrade: gradeSelection,
-    }
+    const [charts, setCharts] = useState<ChartConfig[]>([
+        { id: Date.now(), schoolSelection: "", yearSelection: "", gradeSelection: "", secondaryLabel: "", chartType: "bar", secondaryChartType: "line" }
+    ]);
+
+    const tabs = ["Acceptances", "Enrollments", "Enroll Capacity", "Completed Application"];
 
     useEffect(() => {
-        // These fields only need to be fetched once. They do not change
-        if(schools.length === 0)
-            fetch("/schools").then(res => res.json()).then(data => setSchools(data.filter((s: School) => !Number(s.NAME_TX))));
-        if(years.length === 0)
-            fetch("/years").then(res => res.json()).then(data => setYears(data));
-        if(grades.length === 0)
-            fetch("/grades").then(res => res.json()).then(data => setGrades(data));
-        if(userSchool.ID === -1)
-            fetch("/usersSchool").then(res => res.json()).then(data => setUserSchool(data));
-    }, [])
+        if (schools.length === 0) fetch("/schools").then(res => res.json()).then(data => setSchools(data.filter((s: School) => !Number(s.NAME_TX))));
+        if (years.length === 0) fetch("/years").then(res => res.json()).then(data => setYears(data));
+        if (grades.length === 0) fetch("/grades").then(res => res.json()).then(data => setGrades(data));
+    }, []);
 
     useEffect(() => {
-        // Other charts don't need the grade field
-        // Line charts don't need the year field
-        if(chartType !== "line"){
-            setGradeSelection("");
-        }else {
-            setYearSelection("");
+        setCharts(prev => prev.map(chart => (chart.secondaryLabel === activeTab ? { ...chart, secondaryLabel: "" } : chart)));
+    }, [activeTab]);
+
+    const handleGlobalChartTypeChange = (newType: string) => {
+        setGlobalChartType(newType);
+        setCharts(charts.map(chart => {
+            const updated = { ...chart, chartType: newType };
+            if (newType !== "line") updated.gradeSelection = "";
+            if (newType === "line") updated.yearSelection = "";
+            return updated;
+        }));
+    };
+
+    const handleGlobalSecondaryChartTypeChange = (newType: string) => {
+        setGlobalSecondaryChartType(newType);
+        setCharts(charts.map(chart => ({ ...chart, secondaryChartType: newType })));
+    };
+
+    const addChart = () => {
+        if (charts.length < 4) {
+            setCharts([...charts, {
+                id: Date.now(),
+                schoolSelection: "",
+                yearSelection: "",
+                gradeSelection: "",
+                secondaryLabel: "",
+                chartType: globalChartType,
+                secondaryChartType: globalSecondaryChartType
+            }]);
         }
-    }, [chartType]);
+    };
 
-    function compare(type: string){
-        setCompareType(type);
-        setIsComparing(true);
-    }
+    const updateChart = (updatedConfig: ChartConfig) => {
+        setCharts(charts.map(c => c.id === updatedConfig.id ? updatedConfig : c));
+    };
 
-    function exitCompare(){
-        setIsComparing(false);
-        setCompareType("");
-    }
+    const removeChart = (id: number) => {
+        setCharts(charts.filter(c => c.id !== id));
+    };
 
-    if(isComparing){
-        return <AdmissionsCompare schools={schools} grades={grades} years={years} userSchool={userSchool} exitCompare={exitCompare} compareType={compareType}/>
-    }
+    const getGridLayout = () => {
+        if (charts.length === 1) return "grid grid-cols-1 w-full max-w-5xl mx-auto gap-6";
+        if (charts.length === 2) return "grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 w-full gap-4";
+        return "grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 w-full gap-4";
+    };
+
     return (
-        <div>
-            <SchoolSelector userSchool={userSchool} schools={schools} years={years} schoolSelection={schoolSelection} setSchoolSelection={setSchoolSelection} yearSelection={yearSelection} setYearSelection={setYearSelection} chartType={chartType} setChartType={setChartType} grades={grades} gradeSelection={gradeSelection} setGradeSelection={setGradeSelection} />
-            <div className={"mt-2 grid grid-cols-2 gap-4"}>
-                <GraphSection graphProps={graphProps} label={"Acceptances"} compare={compare}/>
-                <GraphSection graphProps={graphProps} label={"Enrollments"} compare={compare}/>
-                <GraphSection graphProps={graphProps} label={"Enroll Capacity"} compare={compare}/>
-                <GraphSection graphProps={graphProps} label={"Completed Application"} compare={compare}/>
+        <div className="flex flex-col min-h-screen gap-4 p-4">
+            <div className="flex flex-wrap space-x-2 border-b-2 border-gray-200 pb-0">
+                {tabs.map(tab => (
+                    <ButtonTab
+                        key={tab}
+                        title={tab}
+                        toggled={activeTab === tab}
+                        switchTab={setActiveTab}
+                    />
+                ))}
+            </div>
+
+            <div className="flex-1 mt-2">
+                <div className="flex justify-between items-center bg-gray-100 p-4 rounded mb-6 shadow-sm">
+                    <div className="flex items-center space-x-4">
+                        <label className="font-bold text-gray-700">Apply to All (Chart Type):</label>
+                        <select
+                            className="border p-2 rounded outline-none"
+                            value={globalChartType}
+                            onChange={(e) => handleGlobalChartTypeChange(e.target.value)}
+                        >
+                            <option value="bar">Bar</option>
+                            <option value="line">Line</option>
+                            <option value="pie">Pie</option>
+                            <option value="doughnut">Doughnut</option>
+                        </select>
+
+                        {(globalChartType === "bar" || globalChartType === "line") && (
+                            <>
+                                <label className="font-bold text-gray-700 ml-4">Apply to All (Dual-Axis):</label>
+                                <select
+                                    className="border p-2 rounded outline-none"
+                                    value={globalSecondaryChartType}
+                                    onChange={(e) => handleGlobalSecondaryChartTypeChange(e.target.value)}
+                                >
+                                    <option value="line">Line</option>
+                                    <option value="bar">Bar</option>
+                                </select>
+                            </>
+                        )}
+                    </div>
+
+                    <Button
+                        onClick={addChart}
+                        buttonText={`Add Chart (${charts.length}/4)`}
+                        disabled={charts.length >= 4}
+                    />
+                </div>
+
+                <div className={getGridLayout()}>
+                    {charts.map((chart) => (
+                        <AdmissionGraphs
+                            key={chart.id}
+                            config={chart}
+                            updateConfig={updateChart}
+                            removeChart={() => removeChart(chart.id)}
+                            label={activeTab}
+                            availableTabs={tabs}
+                            schools={schools}
+                            years={years}
+                            grades={grades}
+                            showRemove={charts.length > 1}
+                        />
+                    ))}
+                </div>
             </div>
         </div>
-
-    )
-
+    );
 }
