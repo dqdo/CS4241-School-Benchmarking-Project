@@ -2,18 +2,20 @@
 
 import {useEffect, useRef, useState} from "react";
 import Chart, {ChartData, ChartOptions, ChartType} from 'chart.js/auto';
-import Dropdown from "../../elements/Dropdown";
-import Button from "../../elements/Button";
 import SchoolSelector from "../../elements/SchoolSelector";
-import {Grade} from "./Admissions";
+import {Grade, School, Year} from "./Admissions";
 
-type AdmissionsGraphProps = {
+export type AdmissionsGraphProps = {
     label: string;
     standalone: boolean;
     selectedSchool?: string;
     selectedYear?: string;
     selectedGrade?: string;
     chartType: "doughnut" | "bar" | "pie" | "line";
+    schools: School[];
+    years: Year[];
+    grades: Grade[];
+    userSchool: School;
 }
 
 type AdmissionsDataEntry = {
@@ -22,28 +24,21 @@ type AdmissionsDataEntry = {
     YEAR: number;
 };
 
-export type School = {
-    NAME_TX: string;
-    ID: number;
-}
-
-export type Year = {
-    SCHOOL_YEAR:string
-    ID: number
-}
-
 export default function AdmissionsGraph(props: AdmissionsGraphProps) {
+
+    // ChartJs Refs
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const chartRef = useRef<Chart | null>(null);
+
+    // Chart Data
     const [admissionsData, setAdmissionsData] = useState<AdmissionsDataEntry[]>([]);
+
+    // Selections - Only used for standalone mode
     const [schoolSelection, setSchoolSelection] = useState<string>("");
     const [yearSelection, setYearSelection] = useState<string>("");
     const [gradeSelection, setGradeSelection] = useState<string>("None");
-    const [userSchool, setUserSchool] = useState<School>({ID: -1, NAME_TX: "NONE"});
-    const [grades, setGrades] = useState<Grade[]>([]);
 
-    const [schools, setSchools] = useState<School[]>([]);
-    const [years, setYears] = useState<Year[]>([]);
+    // Colors for charts
     const colors = [
         "#0A3E6C", // primary dark blue
         "#0066CC", // accent blue
@@ -61,22 +56,33 @@ export default function AdmissionsGraph(props: AdmissionsGraphProps) {
         "#0E3B73"  // extra blue 4
     ];
 
+    // Fetch admission data when year, grade, school or chart type changes
     useEffect(() => {
         fetchAdmissions();
-    }, [props.selectedSchool, props.selectedYear, props.selectedGrade, schoolSelection, yearSelection, props.chartType]);
+    }, [props.selectedSchool, props.selectedYear, props.selectedGrade, schoolSelection, yearSelection, gradeSelection, props.chartType]);
+
+    // Same functionality as in Admissions.tsx but for standalone graphs
+    useEffect(() => {
+        if(!props.standalone)
+            return;
+        // Other charts don't need the grade field
+        // Line charts don't need the year field
+        if(props.chartType !== "line"){
+            setGradeSelection("");
+        }else {
+            setYearSelection("");
+        }
+    }, [props.chartType]);
 
 
     useEffect(() => {
-        fetch("/schools").then(res => res.json()).then(data => setSchools(data.filter((s: School) => !Number(s.NAME_TX))));
-        fetch("/years").then(res => res.json()).then(data => setYears(data));
-        fetch("/usersSchool").then(res => res.json()).then(data => setUserSchool(data));
-        fetch("/grades").then(res => res.json()).then(data => setGrades(data));
         let isMounted = true;
         if (!isMounted || !canvasRef.current) return;
         // Destroy previous chart if exists
         if (chartRef.current) chartRef.current.destroy();
 
         const chartData: ChartData<ChartType, number[], string> = {
+            // line charts use school year as the x-axis, others use grade
             labels: admissionsData.map((row) => props.chartType === "line" ? String(row.YEAR) : row.DESCRIPTION),
             datasets: [
                 {
@@ -117,7 +123,7 @@ export default function AdmissionsGraph(props: AdmissionsGraphProps) {
 
     return (
         <div className={"text-center"}>
-            {props.standalone && <SchoolSelector grades={grades} chartType={props.chartType} gradeSelection={gradeSelection} setGradeSelection={setGradeSelection} userSchool={userSchool} schools={schools} years={years} schoolSelection={schoolSelection} setSchoolSelection={setSchoolSelection} yearSelection={yearSelection} setYearSelection={setYearSelection} />
+            {props.standalone && <SchoolSelector grades={props.grades} chartType={props.chartType} gradeSelection={gradeSelection} setGradeSelection={setGradeSelection} userSchool={props.userSchool} schools={props.schools} years={props.years} schoolSelection={schoolSelection} setSchoolSelection={setSchoolSelection} yearSelection={yearSelection} setYearSelection={setYearSelection} />
             }
             <h1 className={"font-bold text-2xl"}>{props.label}</h1>
             <canvas ref={canvasRef}></canvas>
