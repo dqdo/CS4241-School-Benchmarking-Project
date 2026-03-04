@@ -16,7 +16,6 @@ type SectionProps = {
 function KPISection({ label, color, children }: SectionProps) {
     return (
         <div className="contents">
-            {/* Full-width category label spanning the grid */}
             <div className="col-span-full flex items-center gap-2 mt-1">
                 <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
                 <span className="text-xs font-semibold uppercase tracking-widest" style={{ color }}>
@@ -93,43 +92,52 @@ export default function Dashboard() {
                 />
             </div>
 
-            {/* KPI Grid */}
             {ready ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                <>
+                    <div className="flex items-center gap-6 mb-4 px-1">
+                        <div className="flex items-center gap-1.5">
+                            <div className="w-3 h-3 rounded bg-white border border-gray-200 shadow-sm" />
+                            <span className="text-xs text-gray-500 font-medium">This school</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <div className="w-3 h-3 rounded bg-gray-100 border border-dashed border-gray-300" />
+                            <span className="text-xs text-gray-400 font-medium">All schools benchmark</span>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                        <KPISection label="Enrollment" color="#0A3E6C">
+                            <EnrollmentKPIs
+                                selectedSchool={schoolSelection}
+                                yearStartId={yearStart.ID}
+                                yearEndId={yearEnd.ID}
+                            />
+                        </KPISection>
 
-                    <KPISection label="Enrollment" color="#0A3E6C">
-                        <EnrollmentKPIs
-                            selectedSchool={schoolSelection}
-                            yearStartId={yearStart.ID}
-                            yearEndId={yearEnd.ID}
-                        />
-                    </KPISection>
+                        <KPISection label="Personnel" color="#1A6B3C">
+                            <PersonnelKPIs
+                                selectedSchool={schoolSelection}
+                                yearStartId={yearStart.ID}
+                                yearEndId={yearEnd.ID}
+                            />
+                        </KPISection>
 
-                    <KPISection label="Personnel" color="#1A6B3C">
-                        <PersonnelKPIs
-                            selectedSchool={schoolSelection}
-                            yearStartId={yearStart.ID}
-                            yearEndId={yearEnd.ID}
-                        />
-                    </KPISection>
+                        <KPISection label="Attrition" color="#B45309">
+                            <AttritionKPIs
+                                selectedSchool={schoolSelection}
+                                yearStartId={yearStart.ID}
+                                yearEndId={yearEnd.ID}
+                            />
+                        </KPISection>
 
-                    <KPISection label="Attrition" color="#B45309">
-                        <AttritionKPIs
-                            selectedSchool={schoolSelection}
-                            yearStartId={yearStart.ID}
-                            yearEndId={yearEnd.ID}
-                        />
-                    </KPISection>
-
-                    <KPISection label="Employee Ratios" color="#7C3AED">
-                        <EmployeeRatioKPIs
-                            selectedSchool={schoolSelection}
-                            yearStartId={yearStart.ID}
-                            yearEndId={yearEnd.ID}
-                        />
-                    </KPISection>
-
-                </div>
+                        <KPISection label="Employee Ratios" color="#7C3AED">
+                            <EmployeeRatioKPIs
+                                selectedSchool={schoolSelection}
+                                yearStartId={yearStart.ID}
+                                yearEndId={yearEnd.ID}
+                            />
+                        </KPISection>
+                    </div>
+                </>
             ) : (
                 <div className="flex items-center justify-center h-40 text-gray-400 text-base">
                     {schoolSelection ? "Loading years…" : "Select a school to view KPIs"}

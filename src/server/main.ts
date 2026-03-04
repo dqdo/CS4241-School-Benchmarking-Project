@@ -1102,6 +1102,43 @@ app.get("/teacherAttrition", async (req, res) => {
   res.status(200).json({ teacherAttritionRate });
 });
 
+app.get("/acceptanceRateAllTime", async (req, res) => {
+    if (!db) {
+        return res.status(500).send("Database connection error");
+    }
+    const year = req.query.year ? Number(req.query.year) : undefined;
+
+    const data = await db.collection("AdmissionActivity").aggregate([
+        {$match: year ? { SCHOOL_YR_ID: year } : {}},
+        {
+            $group: {
+                _id: null,
+                totalAcceptances: { $sum: "$ACCEPTANCES_TOTAL" },
+                totalApplications: { $sum: "$COMPLETED_APPLICATION_TOTAL" }
+            }
+        },
+        {
+            $project: {
+                _id: 0,
+                acceptanceRate: {
+                    $cond: [
+                        { $eq: ["$totalApplications", 0] },
+                        0,
+                        {
+                            $multiply: [
+                                { $divide: ["$totalAcceptances", "$totalApplications"] },
+                                100
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    ]).toArray();
+
+    return res.status(200).json(data[0]);
+});
+
 ViteExpress.listen(app, 3000, async () => {
   await client.connect();
   console.log('Connected to MongoDB');
