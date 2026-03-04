@@ -5,6 +5,7 @@ import Dashboard from "./components/Dashboard";
 import DataEntry from "./components/DataEntry";
 import Admissions from "./components/admissions/Admissions";
 import EnrollAttrition from "./components/EnrollAttrition/EnrollAttrition";
+import Personnel from "./components/personnel/Personnel";
 
 function App() {
     const [tabsActive, setTabsActive] = useState<boolean[]>([]);
@@ -24,6 +25,7 @@ function App() {
                   {tabsActive[1] && <DataEntry />}
                   {tabsActive[2] && <Admissions />}
                   {tabsActive[3] && <EnrollAttrition />}
+                  {tabsActive[4] && <Personnel />}
               </div>
       </div>
   );

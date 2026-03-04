@@ -88,20 +88,43 @@ app.get("/acceptanceRate", async (req, res) => {
             }
         }
     ]).toArray();
+});
 
-    const applications = await db.collection("AdmissionActivity").aggregate([
-        {
-            $match: { SCHOOL_ID: school }
-        },
-        {
-            $group: {
-                _id: null,
-                totalApplications: { $sum: "$COMPLETED_APPLICATION_TOTAL" }
+app.get("/acceptanceRateAllTime", async (req, res) => {
+  if (!db) {
+    return res.status(500).send("Database connection error");
+  }
+  const year = req.query.year ? Number(req.query.year) : undefined;
+
+  const data = await db.collection("AdmissionActivity").aggregate([
+    {$match: year ? { SCHOOL_YR_ID: year } : {}},
+      {
+      $group: {
+        _id: null,
+        totalAcceptances: { $sum: "$ACCEPTANCES_TOTAL" },
+        totalApplications: { $sum: "$COMPLETED_APPLICATION_TOTAL" }
+      }
+    },
+    {
+      $project: {
+        _id: 0,
+        acceptanceRate: {
+          $cond: [
+            { $eq: ["$totalApplications", 0] },
+            0,
+            {
+              $multiply: [
+                { $divide: ["$totalAcceptances", "$totalApplications"] },
+                100
+              ]
             }
+          ]
         }
-    ]).toArray();
-    const acceptanceRate = (acceptances[0].totalAcceptances || 0 )/ (applications[0].totalApplications || 1) * 100;
-    res.status(200).json({acceptanceRate});
+      }
+    }
+  ]).toArray();
+
+  return res.status(200).json(data[0]);
 });
 
 
@@ -416,6 +439,178 @@ app.get("/admissions", async (req, res) => {
   return res.status(200).json(data);
 })
 
+app.get("/personnel", async (req, res) => {
+  if(!db || !req.oidc.user){
+    return res.status(500).send("Database connection error");
+  }
+
+  const schoolId: string = req.oidc.user[SCHOOL_NAMESPACE] || "";
+  const school = schoolId == "Admin" ? Number(req.query.school) : Number(schoolId);
+
+  const field = req.query.field ? req.query.field : undefined;
+  let projection = {};
+  let filter = {};
+  switch (field) {
+    case "TOTAL TEACHER FTES":
+      projection = {
+        _id: 0,
+        YEAR: "$year",
+        DATA: "$fullTimeEmployees"
+      }
+      filter = {
+        EMP_CAT_CD: "EMPCAT_T",
+        SCHOOL_ID: school,
+      }
+      break;
+    case "TOTAL FTES":
+      projection = {
+        _id: 0,
+        YEAR: "$year",
+        DATA: "$fullTimeEmployees"
+      }
+      filter = {
+        SCHOOL_ID: school,
+      }
+      break;
+    case "TEACHER ATTRITION":
+      projection = {
+        _id: 0,
+        DATA: "$CAPACITY_ENROLL",
+        DESCRIPTION: "$grade.DESCRIPTION_TX",
+        YEAR: "$year"
+      }
+      break;
+  }
+
+  const data = await db.collection("EmployeePersonnel").aggregate([
+    { $match: filter },
+    {
+      $lookup: {
+        from: "SchoolYear",
+        localField: "SCHOOL_YR_ID",
+        foreignField: "ID",
+        as: "year"
+      }
+    },
+    { $unwind: "$year" },
+    {
+      $group: {
+        _id: "$year.ID",
+        year: { $first: "$year.SCHOOL_YEAR" },
+        fullTimeEmployees: { $sum: "$FT_EMPLOYEES" }
+      }
+    },
+    { $sort: { "_id": 1 } },
+    { $project: projection }
+  ]).toArray();
+  return res.status(200).json(data);
+})
+
+app.get("/personnelAttrition", async (req, res) => {
+  if(!db || !req.oidc.user){
+    return res.status(500).send("Database connection error");
+  }
+
+  const schoolId: string = req.oidc.user[SCHOOL_NAMESPACE] || "";
+  const school = schoolId == "Admin" ? Number(req.query.school) : Number(schoolId);
+  const field = req.query.field ? req.query.field : undefined;
+  console.log(field)
+  let filter = {
+    EMP_CAT_CD: "EMPCAT_T",
+    SCHOOL_ID: school,
+  };
+
+  let valueStage = {};
+
+  if (field === "TEACHERS LOST") {
+    valueStage = {
+      $addFields: {
+        DATA: {
+          $max: [
+            { $multiply: ["$netChange", -1] },
+            0
+          ]
+        }
+      }
+    };
+  } else if (field === "TEACHERS GAINED") {
+    valueStage = {
+      $addFields: {
+        DATA: {
+          $max: [
+            "$netChange",
+            0
+          ]
+        }
+      }
+    };
+  }
+
+  const data = await db.collection("EmployeePersonnel").aggregate([
+    { $match: filter },
+
+    {
+      $lookup: {
+        from: "SchoolYear",
+        localField: "SCHOOL_YR_ID",
+        foreignField: "ID",
+        as: "year"
+      }
+    },
+
+    { $unwind: "$year" },
+
+    {
+      $group: {
+        _id: "$year.ID",
+        YEAR: { $first: "$year.ID" },
+        fullTimeEmployees: { $sum: "$FT_EMPLOYEES" }
+      }
+    },
+
+    { $sort: { _id: 1 } },
+
+    {
+      $setWindowFields: {
+        sortBy: { _id: 1 },
+        output: {
+          previousYearFT: {
+            $shift: {
+              output: "$fullTimeEmployees",
+              by: -1
+            }
+          }
+        }
+      }
+    },
+
+    {
+      $addFields: {
+        netChange: {
+          $subtract: [
+            "$fullTimeEmployees",
+            { $ifNull: ["$previousYearFT", "$fullTimeEmployees"] }
+          ]
+        }
+      }
+    },
+
+    valueStage,
+
+    {
+      $project: {
+        _id: 0,
+        YEAR: 1,
+        DATA: 1
+      }
+    }
+
+  ]).toArray();
+
+  return res.status(200).json(data);
+})
+
+
 app.get("/enrollment-attrition", async (req, res) => {
   if (!db) return res.status(500).send("Database connection error");
 
@@ -468,7 +663,6 @@ app.get("/enrollment-attrition", async (req, res) => {
       },
     },
   ]).toArray();
-
   return res.status(200).json(data);
 });
 

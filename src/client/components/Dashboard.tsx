@@ -18,7 +18,7 @@ export default function Dashboard() {
     const [schoolSelection, setSchoolSelection] = useState<string>("");
     const [yearSelection, setYearSelection] = useState<string>("");
     const [gradeSelection, setGradeSelection] = useState<string>("");
-    const [chartType, setChartType] = useState<"bar" | "doughnut" | "pie" | "line">("line");
+    const [chartType, setChartType] = useState<"bar" | "doughnut" | "pie" | "line">("bar");
 
     // State to hold the fetched graph data
     const [acceptanceData, setAcceptanceData] = useState<GraphData[]>([]);
@@ -49,7 +49,7 @@ export default function Dashboard() {
                     grade: gradeSelection,
                 });
 
-                const response = await fetch("/acceptanceRateG?" + params.toString());
+                const response = await fetch("/acceptanceRate?" + params.toString());
                 const data = await response.json();
 
                 const formattedData = data.map((row: {acceptanceRate: number, year: number}): GraphData => {
@@ -76,14 +76,14 @@ export default function Dashboard() {
                 setSchoolSelection={setSchoolSelection}
                 yearSelection={yearSelection}
                 setYearSelection={setYearSelection}
-                chartType="line"
+                chartType={chartType}
                 grades={grades}
                 gradeSelection={gradeSelection}
                 setGradeSelection={setGradeSelection}
             />
 
             <h1 className="font-bold text-2xl">Enrollment</h1>
-            <EnrollmentKPIs selectedSchool={schoolSelection}/>
+            <EnrollmentKPIs selectedSchool={schoolSelection} selectedYear={yearSelection}/>
 
             <Graph
                 label="Acceptance Rate"
