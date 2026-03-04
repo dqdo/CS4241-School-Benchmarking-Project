@@ -30,20 +30,19 @@ const INITIAL_FORM_STATE = {
     ...Object.fromEntries(ALL_FIELDS.map(field => [field.name, ""]))
 };
 
-export default function EnrollmentForm() {
-    const { schoolYears, grades, loading, submitStatus, fetchGrades, fetchAutofillData, submitForm, resetSubmitStatus } = useSchoolDataForm({
+export default function EnrollmentForm({ schoolId }: { schoolId: string }) {
+    const { schoolYears, grades, loading, submitStatus, fetchGrades, fetchAutofillData, submitForm, saveDraft, loadDraft, resetSubmitStatus } = useSchoolDataForm({
         endpoint: '/api/submit-enrollment',
-        dataEndpoint: '/api/enrollment-data'
+        dataEndpoint: '/api/enrollment-data',
+        schoolId
     });
 
     const [formData, setFormData] = useState(INITIAL_FORM_STATE);
 
-    //Fetch grades when year changes
     useEffect(() => {
         fetchGrades(formData.SCHOOL_YR_ID);
     }, [formData.SCHOOL_YR_ID]);
 
-    //Fetch autofill data when both year and grade are selected
     useEffect(() => {
         if (formData.SCHOOL_YR_ID && formData.GRADE_DEF_ID) {
             fetchAutofillData(formData.SCHOOL_YR_ID, formData.GRADE_DEF_ID).then(data => {
@@ -57,19 +56,15 @@ export default function EnrollmentForm() {
                 }
             });
         }
-    }, [formData.SCHOOL_YR_ID, formData.GRADE_DEF_ID]);
+    }, [formData.SCHOOL_YR_ID, formData.GRADE_DEF_ID, schoolId]);
 
-    //Clear success message after 3 seconds
     useEffect(() => {
         if (submitStatus === 'success') {
-            const timer = setTimeout(() => {
-                resetSubmitStatus();
-            }, 3000);
+            const timer = setTimeout(() => resetSubmitStatus(), 3000);
             return () => clearTimeout(timer);
         }
     }, [submitStatus, resetSubmitStatus]);
 
-    //Handle form data changing
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({
@@ -79,35 +74,46 @@ export default function EnrollmentForm() {
         }));
     };
 
-    //Validation function to check if form has errors
     const hasValidationErrors = () => {
         for (const field of ALL_FIELDS) {
             const value = formData[field.name as keyof typeof formData];
             if (!value || value === "") continue;
-
             if (/[^0-9]/.test(value)) return true;
         }
         return false;
     };
 
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-
-        if (hasValidationErrors()) {
-            console.log("Form has validation errors - cannot submit");
+    const handleSaveDraft = async () => {
+        if (!formData.SCHOOL_YR_ID || !formData.GRADE_DEF_ID) {
+            alert("Please select a Year and Grade to save a draft.");
             return;
         }
+        const result = await saveDraft("Enrollment", formData);
+        if (result.success) alert("Draft saved successfully!");
+    };
 
-        console.log("Submitting Enrollment Data: ", formData);
-        const result = await submitForm(formData);
-
-        if (result.success) {
-            //Reset form to initial state
-            setFormData(INITIAL_FORM_STATE);
+    const handleLoadDraft = async () => {
+        if (!formData.SCHOOL_YR_ID || !formData.GRADE_DEF_ID) {
+            alert("Please select a Year and Grade to load its draft.");
+            return;
+        }
+        const data = await loadDraft("Enrollment", formData.SCHOOL_YR_ID, formData.GRADE_DEF_ID);
+        if (data) {
+            setFormData(prev => ({ ...prev, ...data }));
+            alert("Draft loaded!");
+        } else {
+            alert("No draft found for this year and grade.");
         }
     };
 
-    //Group fields into sections for rendering
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (hasValidationErrors()) return;
+
+        const result = await submitForm(formData);
+        if (result.success) setFormData(INITIAL_FORM_STATE);
+    };
+
     const ADDITIONS_GRADUATIONS_FIELDS = [ENROLLMENT_FIELDS[0], ENROLLMENT_FIELDS[1], ENROLLMENT_FIELDS[5]];
     const ADDITIONS_GRADUATIONS_SOC = [ENROLLMENT_FIELDS_SOC[0], ENROLLMENT_FIELDS_SOC[1], ENROLLMENT_FIELDS_SOC[5]];
 
@@ -134,26 +140,18 @@ export default function EnrollmentForm() {
             <h2 className="text-2xl font-semibold text-[#1E3869]">Enrollment & Attrition</h2>
             <p className="text-gray-600 text-sm">Track student retention, graduations, and departures.</p>
 
-            {/* Success/Error Messages */}
             {submitStatus === 'success' && (
                 <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
                     <span>Data saved successfully!</span>
                 </div>
             )}
 
             {submitStatus === 'error' && (
                 <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                    </svg>
                     <span>Error saving data. Please try again.</span>
                 </div>
             )}
 
-            {/* Dropdown Row */}
             <DropdownSection
                 schoolYears={schoolYears}
                 grades={grades}
@@ -164,28 +162,22 @@ export default function EnrollmentForm() {
             {FORM_SECTIONS.map((section, sectionIndex) => (
                 <div key={sectionIndex} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
                     <div className="space-y-4 pt-4">
-
-                        {/* Section title and description */}
                         <div className="px-4">
                             <h3 className="text-lg font-semibold text-[#1E3869]">{section.title}</h3>
                             <p className="text-sm text-gray-500">{section.description}</p>
                         </div>
 
-                        {/* Column Headers */}
                         <div className="hidden md:grid grid-cols-12 gap-6 px-4 text-sm font-semibold text-gray-600 uppercase tracking-wider">
                             <div className="col-span-4">Metric</div>
                             <div className="col-span-4">Non-Students of Color (SOC)</div>
                             <div className="col-span-4">Students of Color (SOC)</div>
                         </div>
 
-                        {/* Render rows in cards */}
                         <div className="bg-white rounded-lg border-t border-gray-200 overflow-hidden">
                             {section.fields.map((field, index) => {
                                 const socField = section.socFields[index];
                                 return (
                                     <div key={field.name} className="grid grid-cols-1 md:grid-cols-12 gap-6 p-4 bg-gray-50/50 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors items-center">
-
-                                        {/* Row label */}
                                         <div className="col-span-1 md:col-span-4 flex items-center gap-2">
                                             <label className="text-sm font-semibold text-gray-800">{field.label}</label>
                                             <Tooltip content={field.tooltip} placement="top" style="light" arrow={false}>
@@ -197,7 +189,6 @@ export default function EnrollmentForm() {
                                             </Tooltip>
                                         </div>
 
-                                        {/* Non-SOC input */}
                                         <div className="col-span-1 md:col-span-4">
                                             <ValidatedNumberInput
                                                 label="Non-SOC"
@@ -208,7 +199,6 @@ export default function EnrollmentForm() {
                                             />
                                         </div>
 
-                                        {/* SOC input */}
                                         <div className="col-span-1 md:col-span-4">
                                             <ValidatedNumberInput
                                                 label="SOC"
@@ -226,7 +216,21 @@ export default function EnrollmentForm() {
                 </div>
             ))}
 
-            <div className="flex justify-end pt-6">
+            <div className="flex justify-end pt-6 gap-3">
+                <button
+                    type="button"
+                    onClick={handleLoadDraft}
+                    className="bg-gray-200 text-gray-700 px-6 py-3 rounded font-semibold hover:bg-gray-300 transition-colors shadow-sm"
+                >
+                    Load Draft
+                </button>
+                <button
+                    type="button"
+                    onClick={handleSaveDraft}
+                    className="bg-white border-2 border-[#0693E3] text-[#0693E3] px-6 py-3 rounded font-semibold hover:bg-blue-50 transition-colors shadow-sm"
+                >
+                    Save Draft
+                </button>
                 <button
                     type="submit"
                     disabled={loading}
