@@ -48,6 +48,16 @@ let db: Db | undefined = undefined;
   school-user@gmail.com SchoolUser!
  */
 
+function parseYearRange(req: any) {
+    const yearStart = req.query.yearStart ? Number(req.query.yearStart) : undefined;
+    const yearEnd   = req.query.yearEnd   ? Number(req.query.yearEnd)   : undefined;
+    // Build an optional SCHOOL_YR_ID filter
+    if (yearStart !== undefined && yearEnd !== undefined) {
+        return { SCHOOL_YR_ID: { $gte: yearStart, $lte: yearEnd } };
+    }
+    return {};
+}
+
 app.get("/currentUser", (req, res) => {
     const user = req.oidc.user;
     res.status(200).json({email: user?.email });
@@ -72,59 +82,22 @@ app.get("/usersSchool", async (req, res) => {
 });
 
 app.get("/acceptanceRate", async (req, res) => {
-    if(!db){
-        return res.status(500).send("Database connection error");
-    }
-    const school = req.query.school ? Number(req.query.school) : undefined;
+    if (!db) return res.status(500).send("Database connection error");
+    const school    = req.query.school ? Number(req.query.school) : undefined;
+    const yearRange = parseYearRange(req);
 
     const acceptances = await db.collection("AdmissionActivity").aggregate([
-        {
-            $match: { SCHOOL_ID: school }
-        },
-        {
-            $group: {
-                _id: null,
-                totalAcceptances: { $sum: "$ACCEPTANCES_TOTAL" }
-            }
-        }
+        { $match: { SCHOOL_ID: school, ...yearRange } },
+        { $group: { _id: null, totalAcceptances: { $sum: "$ACCEPTANCES_TOTAL" } } }
     ]).toArray();
-});
 
-app.get("/acceptanceRateAllTime", async (req, res) => {
-  if (!db) {
-    return res.status(500).send("Database connection error");
-  }
-  const year = req.query.year ? Number(req.query.year) : undefined;
+    const applications = await db.collection("AdmissionActivity").aggregate([
+        { $match: { SCHOOL_ID: school, ...yearRange } },
+        { $group: { _id: null, totalApplications: { $sum: "$COMPLETED_APPLICATION_TOTAL" } } }
+    ]).toArray();
 
-  const data = await db.collection("AdmissionActivity").aggregate([
-    {$match: year ? { SCHOOL_YR_ID: year } : {}},
-      {
-      $group: {
-        _id: null,
-        totalAcceptances: { $sum: "$ACCEPTANCES_TOTAL" },
-        totalApplications: { $sum: "$COMPLETED_APPLICATION_TOTAL" }
-      }
-    },
-    {
-      $project: {
-        _id: 0,
-        acceptanceRate: {
-          $cond: [
-            { $eq: ["$totalApplications", 0] },
-            0,
-            {
-              $multiply: [
-                { $divide: ["$totalAcceptances", "$totalApplications"] },
-                100
-              ]
-            }
-          ]
-        }
-      }
-    }
-  ]).toArray();
-
-  return res.status(200).json(data[0]);
+    const acceptanceRate = (acceptances[0]?.totalAcceptances || 0) / (applications[0]?.totalApplications || 1) * 100;
+    res.status(200).json({ acceptanceRate });
 });
 
 
@@ -180,172 +153,143 @@ app.get("/acceptanceRateG", async (req, res) => {
 
 
 app.get("/yield", async (req, res) => {
-    if(!db){
-        return res.status(500).send("Database connection error");
-    }
-    const school = req.query.school ? Number(req.query.school) : undefined;
+    if (!db) return res.status(500).send("Database connection error");
+    const school    = req.query.school ? Number(req.query.school) : undefined;
+    const yearRange = parseYearRange(req);
 
     const acceptances = await db.collection("AdmissionActivity").aggregate([
-        {
-            $match: { SCHOOL_ID: school }
-        },
-        {
-            $group: {
-                _id: null,
-                totalAcceptances: { $sum: "$ACCEPTANCES_TOTAL" }
-            }
-        }
+        { $match: { SCHOOL_ID: school, ...yearRange } },
+        { $group: { _id: null, totalAcceptances: { $sum: "$ACCEPTANCES_TOTAL" } } }
     ]).toArray();
 
     const newEnrollments = await db.collection("AdmissionActivity").aggregate([
-        {
-            $match: { SCHOOL_ID: school }
-        },
-        {
-            $group: {
-                _id: null,
-                newEnrollments: { $sum: "$NEW_ENROLLMENTS_TOTAL" }
-            }
-        }
+        { $match: { SCHOOL_ID: school, ...yearRange } },
+        { $group: { _id: null, newEnrollments: { $sum: "$NEW_ENROLLMENTS_TOTAL" } } }
     ]).toArray();
-    const _yield = (newEnrollments[0].newEnrollments || 0 )/ (acceptances[0].totalAcceptances || 1) * 100;
-    res.status(200).json({_yield});
+
+    const _yield = (newEnrollments[0]?.newEnrollments || 0) / (acceptances[0]?.totalAcceptances || 1) * 100;
+    res.status(200).json({ _yield });
 });
 
 app.get("/attrition", async (req, res) => {
-    if(!db){
-        return res.status(500).send("Database connection error");
-    }
-    const school = req.query.school ? Number(req.query.school) : undefined;
+    if (!db) return res.status(500).send("Database connection error");
+    const school    = req.query.school ? Number(req.query.school) : undefined;
+    const yearRange = parseYearRange(req);
 
-    const latestYearDoc = await db.collection("AdmissionActivity")
-        .find({ SCHOOL_ID: school })
-        .sort({ SCHOOL_YR_ID: -1 })
-        .limit(1)
-        .toArray();
+    const totalNewEnrollments = await db.collection("AdmissionActivity").aggregate([
+        { $match: { SCHOOL_ID: school, ...yearRange } },
+        { $group: { _id: null, total: { $sum: "$NEW_ENROLLMENTS_TOTAL" } } }
+    ]).toArray();
 
-    const latestYear = latestYearDoc[0].SCHOOL_YR_ID;
+    const totalLostStudents = await db.collection("EnrollAttrition").aggregate([
+        { $match: { SCHOOL_ID: school, ...yearRange } },
+        { $group: { _id: null, total: { $sum: "$STUD_NOT_RETURN" } } }
+    ]).toArray();
 
-    const totalNewEnrollments = await db.collection("AdmissionActivity")
-        .aggregate([
-            { $match: { SCHOOL_ID: school, SCHOOL_YR_ID: latestYear } },
-            { $group: { _id: null, total: { $sum: "$NEW_ENROLLMENTS_TOTAL" } } }
-        ])
-        .toArray();
-
-    const totalLostStudents = await db.collection("EnrollAttrition")
-        .aggregate([
-            { $match: { SCHOOL_ID: school, SCHOOL_YR_ID: latestYear } },
-            { $group: { _id: null, total: { $sum: "$STUD_NOT_RETURN" } } }
-        ])
-        .toArray();
-    const attritionRate = (totalLostStudents[0].total || 0) / (totalNewEnrollments[0].total || 1) * 100;
-    res.status(200).json({attritionRate});
+    const attritionRate = (totalLostStudents[0]?.total || 0) / (totalNewEnrollments[0]?.total || 1) * 100;
+    res.status(200).json({ attritionRate });
 });
 
 app.get("/totalTeacherFTEs", async (req, res) => {
   if (!db) return res.status(500).send("Database connection error");
   const school = req.query.school ? Number(req.query.school) : undefined;
+  const yearRange = parseYearRange(req);
 
   const result = await db.collection("EmployeePersonnel").aggregate([
-    { $match: { SCHOOL_ID: school } },
+    { $match: { SCHOOL_ID: school, ...yearRange } },
     { $group: { _id: null, totalTeacherFTEs: { $sum: "$FTE_ONLY_NUM" } } }
   ]).toArray();
 
-  const totalTeacherFTEs = result[0]?.totalTeacherFTEs || 0;
-  res.status(200).json({ totalTeacherFTEs });
+    res.status(200).json({ totalTeacherFTEs: result[0]?.totalTeacherFTEs || 0 });
 });
 
 app.get("/totalFTEs", async (req, res) => {
-  if (!db) return res.status(500).send("Database connection error");
-  const school = req.query.school ? Number(req.query.school) : undefined;
+    if (!db) return res.status(500).send("Database connection error");
+    const school    = req.query.school ? Number(req.query.school) : undefined;
+    const yearRange = parseYearRange(req);
 
-  const result = await db.collection("EmployeePersonnel").aggregate([
-    { $match: { SCHOOL_ID: school } },
-    { $group: { _id: null, totalFTEs: { $sum: "$TOTAL_EMPLOYEES" } } }
-  ]).toArray();
+    const result = await db.collection("EmployeePersonnel").aggregate([
+        { $match: { SCHOOL_ID: school, ...yearRange } },
+        { $group: { _id: null, totalFTEs: { $sum: "$TOTAL_EMPLOYEES" } } }
+    ]).toArray();
 
-  const totalFTEs = result[0]?.totalFTEs || 0;
-  res.status(200).json({ totalFTEs });
+    res.status(200).json({ totalFTEs: result[0]?.totalFTEs || 0 });
 });
 
 app.get("/studentsPerTeacher", async (req, res) => {
   if (!db) return res.status(500).send("Database connection error");
-  const school = req.query.school ? Number(req.query.school) : undefined;
+  const school    = req.query.school ? Number(req.query.school) : undefined;
+  const yearRange = parseYearRange(req);
 
   const teacherResult = await db.collection("EmployeePersonnel").aggregate([
-    { $match: { SCHOOL_ID: school } },
+    { $match: { SCHOOL_ID: school, ...yearRange } },
     { $group: { _id: null, totalTeacherFTEs: { $sum: "$FTE_ONLY_NUM" } } }
   ]).toArray();
 
   const studentResult = await db.collection("EnrollAttrition").aggregate([
-    { $match: { SCHOOL_ID: school } },
+    { $match: { SCHOOL_ID: school, ...yearRange } },
     { $group: { _id: null, totalStudents: { $sum: "$STUDENTS_ADDED_DURING_YEAR" } } }
   ]).toArray();
 
-  const totalTeacherFTEs = teacherResult[0]?.totalTeacherFTEs || 1;
-  const totalStudents = studentResult[0]?.totalStudents || 0;
-  const studentsPerTeacher = totalStudents / totalTeacherFTEs;
+  const studentsPerTeacher = (studentResult[0]?.totalStudents || 0) / (teacherResult[0]?.totalTeacherFTEs || 1);
   res.status(200).json({ studentsPerTeacher });
 });
 
 app.get("/teacherFTEPer1000", async (req, res) => {
   if (!db) return res.status(500).send("Database connection error");
   const school = req.query.school ? Number(req.query.school) : undefined;
+  const yearRange = parseYearRange(req);
 
   const teacherResult = await db.collection("EmployeePersonnel").aggregate([
-    { $match: { SCHOOL_ID: school } },
+    { $match: { SCHOOL_ID: school, ...yearRange } },
     { $group: { _id: null, totalTeacherFTEs: { $sum: "$FTE_ONLY_NUM" } } }
   ]).toArray();
 
   const studentResult = await db.collection("EnrollAttrition").aggregate([
-    { $match: { SCHOOL_ID: school } },
+    { $match: { SCHOOL_ID: school, ...yearRange } },
     { $group: { _id: null, totalStudents: { $sum: "$STUDENTS_ADDED_DURING_YEAR" } } }
   ]).toArray();
 
-  const totalTeacherFTEs = teacherResult[0]?.totalTeacherFTEs || 0;
-  const totalStudents = studentResult[0]?.totalStudents || 1;
-  const teacherFTEPer1000 = (totalTeacherFTEs / totalStudents) * 1000;
+  const teacherFTEPer1000 = ((teacherResult[0]?.totalTeacherFTEs || 0) / (studentResult[0]?.totalStudents || 1)) * 1000;
   res.status(200).json({ teacherFTEPer1000 });
 });
 
 app.get("/adminsPer1000", async (req, res) => {
   if (!db) return res.status(500).send("Database connection error");
-  const school = req.query.school ? Number(req.query.school) : undefined;
+  const school    = req.query.school ? Number(req.query.school) : undefined;
+  const yearRange = parseYearRange(req);
 
   const adminResult = await db.collection("EmployeeAdminSupport").aggregate([
-    { $match: { SCHOOL_ID: school } },
+    { $match: { SCHOOL_ID: school, ...yearRange } },
     { $group: { _id: null, totalAdmins: { $sum: { $add: ["$FTE_EXEMPT", "$FTE_NONEXEMPT"] } } } }
   ]).toArray();
 
   const studentResult = await db.collection("EnrollAttrition").aggregate([
-    { $match: { SCHOOL_ID: school } },
+    { $match: { SCHOOL_ID: school, ...yearRange } },
     { $group: { _id: null, totalStudents: { $sum: "$STUDENTS_ADDED_DURING_YEAR" } } }
   ]).toArray();
 
-  const totalAdmins = adminResult[0]?.totalAdmins || 0;
-  const totalStudents = studentResult[0]?.totalStudents || 1;
-  const adminsPer1000 = (totalAdmins / totalStudents) * 1000;
+  const adminsPer1000 = ((adminResult[0]?.totalAdmins || 0) / (studentResult[0]?.totalStudents || 1)) * 1000;
   res.status(200).json({ adminsPer1000 });
 });
+
 
 app.get("/employeesPer1000", async (req, res) => {
   if (!db) return res.status(500).send("Database connection error");
   const school = req.query.school ? Number(req.query.school) : undefined;
+  const yearRange = parseYearRange(req);
 
   const employeeResult = await db.collection("EmployeePersonnel").aggregate([
-    { $match: { SCHOOL_ID: school } },
+    { $match: { SCHOOL_ID: school, ...yearRange } },
     { $group: { _id: null, totalEmployees: { $sum: "$TOTAL_EMPLOYEES" } } }
   ]).toArray();
 
   const studentResult = await db.collection("EnrollAttrition").aggregate([
-    { $match: { SCHOOL_ID: school } },
+    { $match: { SCHOOL_ID: school, ...yearRange } },
     { $group: { _id: null, totalStudents: { $sum: "$STUDENTS_ADDED_DURING_YEAR" } } }
   ]).toArray();
 
-  const totalEmployees = employeeResult[0]?.totalEmployees || 0;
-  const totalStudents = studentResult[0]?.totalStudents || 1;
-  const employeesPer1000 = (totalEmployees / totalStudents) * 1000;
+  const employeesPer1000 = ((employeeResult[0]?.totalEmployees || 0) / (studentResult[0]?.totalStudents || 1)) * 1000;
   res.status(200).json({ employeesPer1000 });
 });
 
@@ -662,6 +606,7 @@ app.get("/enrollment-attrition", async (req, res) => {
       },
     },
   ]).toArray();
+
   return res.status(200).json(data);
 });
 
@@ -1139,9 +1084,11 @@ app.get("/api/employee-data", async (req, res) => {
 app.get("/teacherAttrition", async (req, res) => {
   if (!db) return res.status(500).send("Database connection error");
   const school = req.query.school ? Number(req.query.school) : undefined;
+  const yearRange = parseYearRange(req);
 
+    // Get all years in range sorted desc, then compare first two for attrition
   const recentYears = await db.collection("EmployeePersonnel").aggregate([
-    { $match: { SCHOOL_ID: school } },
+    { $match: { SCHOOL_ID: school, ...yearRange } },
     { $group: { _id: "$SCHOOL_YR_ID", totalEmployees: { $sum: "$TOTAL_EMPLOYEES" } } },
     { $sort: { _id: -1 } },
     { $limit: 2 }
@@ -1149,9 +1096,9 @@ app.get("/teacherAttrition", async (req, res) => {
 
   if (recentYears.length < 2) return res.status(200).json({ teacherAttritionRate: 0 });
 
-  const currentYearEmployees = recentYears[0].totalEmployees || 0;
-  const previousYearEmployees = recentYears[1].totalEmployees || 1;
-  const teacherAttritionRate = ((previousYearEmployees - currentYearEmployees) / previousYearEmployees) * 100;
+  const currentYear  = recentYears[0].totalEmployees || 0;
+  const previousYear = recentYears[1].totalEmployees || 1;
+  const teacherAttritionRate = ((previousYear - currentYear) / previousYear) * 100;
   res.status(200).json({ teacherAttritionRate });
 });
 
