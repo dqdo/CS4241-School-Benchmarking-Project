@@ -20,6 +20,7 @@ const ollama = new Ollama({
         Authorization: "Bearer " + process.env.OLLAMA_API_KEY,
     },
 });
+const SCHOOL_NAMESPACE = "https://cs4241-school-benchmarking-project-1.onrender.com/schoolId";
 
 let db: Db | undefined;
 
@@ -410,7 +411,8 @@ async function generateQueryWithRetry(
     history: any[],
     isAdmin: boolean,
     signal?: AbortSignal,
-    previousAttempt?: { queryPlan: QueryPlan; error: string }
+    previousAttempt?: { queryPlan: QueryPlan; error: string },
+    schoolId?: number
 ): Promise<QueryPlan> {
     console.log("[generateQueryWithRetry] Generating query plan...");
 
@@ -431,6 +433,10 @@ async function generateQueryWithRetry(
         }).join("\n")
         : "";
 
+    const scopeHint = !isAdmin && schoolId !== undefined
+        ? `\n\nACCESS SCOPE:\n- This user can only access SCHOOL_ID=${schoolId}.\n- If the question asks for overall averages/benchmarks across all schools, return only aggregate results with no per-school breakdown and no school names/IDs.\n`
+        : "";
+
     let queryMessage = previousAttempt
         ? `
 Previous query attempt FAILED with this plan:
@@ -443,7 +449,7 @@ ${historyContext}
 
 ${previousAttempt.queryPlan.suggestedFix || "Try a different collection, operation type, or query structure."}
 `
-        : `${question}${historyContext}`;
+        : `${question}${historyContext}${scopeHint}`;
 
     const rawPlan = await callAI(querySystemPrompt, queryMessage, signal);
     console.log("[generateQueryWithRetry] AI response:\n", rawPlan);
@@ -472,7 +478,8 @@ async function answerWithData(
     validationAttempt: number = 0,
     // When retrying after a failed validation, pass the last successful queryPlan
     // so the query generator has context instead of treating the question as new.
-    priorQueryPlan: QueryPlan | null = null
+    priorQueryPlan: QueryPlan | null = null,
+    schoolId?: number
 ): Promise<{ reply: string; queryPlan: QueryPlan | null; validation?: ValidationResult }> {
     console.log(`[answerWithData] Question: "${question}" | isAdmin: ${isAdmin} | history: ${history.length} turn(s) | validationAttempt: ${validationAttempt}`);
 
@@ -523,7 +530,9 @@ async function answerWithData(
             // Reset error before each new attempt
             queryError = null;
 
-            queryPlan = await generateQueryWithRetry(question, history, isAdmin, signal, previousAttempt);
+            const globalQ = !isAdmin && isGlobalBenchQuestion(question);
+
+            queryPlan = await generateQueryWithRetry(question, history, isAdmin, signal, previousAttempt, schoolId);
 
             assertNotAborted(signal);
 
@@ -533,11 +542,19 @@ async function answerWithData(
                 return { reply, queryPlan: null };
             }
 
+            if (!isAdmin && schoolId !== undefined) {
+                queryPlan = enforceSchoolScope(queryPlan, schoolId, globalQ);
+            }
+
             console.log(`[executeQuery] Collection: "${queryPlan.collection}" Operation: "${queryPlan.operation}"`);
             const raw = await executeQuery(queryPlan, signal);
             console.log(`[executeQuery] Raw results preview (first 500 chars):\n`, JSON.stringify(raw).slice(0, 500));
             results = sanitiseResults(raw);
             console.log(`[executeQuery] Returned ${results.length} document(s) after sanitisation`);
+
+            if (globalQ) {
+                results = sanitizeGlobalResults(results);
+            }
 
             // Only break out of the retry loop if we actually got results
             if (results.length > 0) {
@@ -660,17 +677,103 @@ async function answerWithData(
     }
 }
 
+function isGlobalBenchQuestion(q: string): boolean {
+    // Simple heuristic; keep it conservative.
+    // Add words as you see real queries.
+    return /\b(average|avg|overall|across all schools|all schools|benchmark|mean|median|percentile)\b/i.test(q);
+}
+
+function enforceSchoolScope(queryPlan: QueryPlan, schoolId: number, isGlobal: boolean): QueryPlan {
+    // If global: allow cross-school query, but we’ll still sanitize outputs later.
+    if (isGlobal) return queryPlan;
+
+    const qp: QueryPlan = JSON.parse(JSON.stringify(queryPlan));
+
+    // If the model queries the School collection directly
+    if (qp.collection === "School") {
+        if (qp.operation === "find") {
+            qp.query = { $and: [qp.query ?? {}, { ID: schoolId }] };
+            return qp;
+        }
+        if (qp.operation === "aggregate") {
+            qp.pipeline = [{ $match: { ID: schoolId } }, ...(qp.pipeline ?? [])];
+            return qp;
+        }
+        return qp;
+    }
+
+    // Default: other collections should have SCHOOL_ID
+    if (qp.operation === "find") {
+        qp.query = { $and: [qp.query ?? {}, { SCHOOL_ID: schoolId }] };
+        return qp;
+    }
+
+    if (qp.operation === "aggregate") {
+        qp.pipeline = [{ $match: { SCHOOL_ID: schoolId } }, ...(qp.pipeline ?? [])];
+        return qp;
+    }
+
+    return qp;
+}
+
+function sanitizeGlobalResults(results: any[]): any[] {
+    // Remove obvious school identifiers so interpreter can’t leak other schools.
+    // Safe even if fields don’t exist.
+    return results.map((doc) => {
+        if (!doc || typeof doc !== "object") return doc;
+        const copy = JSON.parse(JSON.stringify(doc));
+
+        // Remove common school-identifying fields
+        delete copy.SCHOOL_ID;
+        delete copy.schoolId;
+        delete copy.schoolID;
+        delete copy.school;
+        delete copy.schoolName;
+        delete copy.NAME_TX; // sometimes school name in joined output
+        delete copy.name;    // often used as school name in your sample pipelines
+
+        return copy;
+    });
+}
+
 // Express route handler: Processes chat messages and returns AI-generated responses
 // Accepts message text, conversation history, and admin flag
 router.post("/chat", async (req, res) => {
-    const { message, history, isAdmin } = req.body;
+    const { message, history} = req.body;
+    const user = req.oidc.user;
+    if(!user || !db) {
+        return res.status(404).json({message: "User not found"});
+    }
+
+    const schoolId: string = user[SCHOOL_NAMESPACE] || "";
+    const isAdmin = !!(req as any).user?.isAdmin;
 
     console.log("[chat] message:", message);
     console.log("[chat] history length:", history?.length ?? 0);
     console.log("[chat] isAdmin:", isAdmin);
+    console.log("[chat auth]", { isAdmin, schoolId });
 
     if (!message || typeof message !== "string") {
         res.status(400).json({ error: "Missing or invalid message" });
+        return;
+    }
+
+    // Enforce that non-admin users must have a schoolId in context
+    if (!isAdmin && (schoolId === undefined || schoolId === null)) {
+        res.status(400).json({ error: "Missing schoolId for school user" });
+        return;
+    }
+
+    const rankingReq =
+        /\b(top|bottom|rank|ranking|best|worst)\b/i.test(message) &&
+        /\bschools?\b/i.test(message);
+
+    if (!isAdmin && rankingReq) {
+        res.status(200).json({
+            reply: "I can’t rank or list other schools for school users. I can tell you your school’s yield rate, or the average yield rate across all schools—tell me which you want.",
+            queryPlan: null,
+            validation: null,
+        });
         return;
     }
 
