@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import {useEffect, useState} from "react";
 import Dropdown from "../elements/Dropdown";
 import EnrollmentKPIs from "./dashboard/EnrollmentKPIs";
 import PersonnelKPIs from "./dashboard/PersonnelKPIs";
 import EmployeeRatioKPIs from "./dashboard/EmployeeRatioKPIs";
+import AttritionKPIs from "./dashboard/AttritionKPIs";
 import { Grade, School, Year } from "./admissions/Admissions";
 import SchoolSelector from "../elements/SchoolSelector";
 import Graph, { GraphData } from "../elements/Graph";
@@ -39,7 +40,7 @@ export default function Dashboard() {
     useEffect(() => {
         async function fetchAcceptanceRate() {
             if (!schoolSelection || !gradeSelection) {
-                setAcceptanceData([]); // Clear data if filters are missing
+                setAcceptanceData([]);
                 return;
             }
 
@@ -85,18 +86,13 @@ export default function Dashboard() {
             <h1 className="font-bold text-2xl">Enrollment</h1>
             <EnrollmentKPIs selectedSchool={schoolSelection}/>
 
-            <Graph
-                label="Acceptance Rate"
-                chartType={chartType}
-                data={acceptanceData}
-            />
-
             <hr className="my-4" />
             <h1 className="font-bold text-2xl">Personnel</h1>
             <PersonnelKPIs selectedSchool={schoolSelection}/>
 
             <hr className="my-4" />
             <h1 className="font-bold text-2xl">Attrition</h1>
+            <AttritionKPIs selectedSchool={schoolSelection}/>
 
             <hr className="my-4" />
             <h1 className="font-bold text-2xl">Employee Ratios</h1>

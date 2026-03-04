@@ -943,6 +943,25 @@ app.get("/api/employee-data", async (req, res) => {
   }
 });
 
+app.get("/teacherAttrition", async (req, res) => {
+  if (!db) return res.status(500).send("Database connection error");
+  const school = req.query.school ? Number(req.query.school) : undefined;
+
+  const recentYears = await db.collection("EmployeePersonnel").aggregate([
+    { $match: { SCHOOL_ID: school } },
+    { $group: { _id: "$SCHOOL_YR_ID", totalEmployees: { $sum: "$TOTAL_EMPLOYEES" } } },
+    { $sort: { _id: -1 } },
+    { $limit: 2 }
+  ]).toArray();
+
+  if (recentYears.length < 2) return res.status(200).json({ teacherAttritionRate: 0 });
+
+  const currentYearEmployees = recentYears[0].totalEmployees || 0;
+  const previousYearEmployees = recentYears[1].totalEmployees || 1;
+  const teacherAttritionRate = ((previousYearEmployees - currentYearEmployees) / previousYearEmployees) * 100;
+  res.status(200).json({ teacherAttritionRate });
+});
+
 ViteExpress.listen(app, 3000, async () => {
   await client.connect();
   console.log('Connected to MongoDB');
