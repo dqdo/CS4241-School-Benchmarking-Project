@@ -514,7 +514,6 @@ app.get("/personnelAttrition", async (req, res) => {
   const schoolId: string = req.oidc.user[SCHOOL_NAMESPACE] || "";
   const school = schoolId == "Admin" ? Number(req.query.school) : Number(schoolId);
   const field = req.query.field ? req.query.field : undefined;
-  console.log(field)
   let filter = {
     EMP_CAT_CD: "EMPCAT_T",
     SCHOOL_ID: school,
