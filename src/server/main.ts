@@ -59,23 +59,20 @@ function parseYearRange(req: any) {
 }
 
 function getRequestSchoolId(req: any) {
-    const user = req.oidc?.user;
-    if (!user) return null;
+  const user = req.oidc?.user;
+  if (!user) return null;
 
-    const auth0SchoolId = user[SCHOOL_NAMESPACE];
-
-    //Check if they are admin via the schoolId claim
-    const isAdmin = auth0SchoolId === "Admin";
-
-    //If Admin, check if they sent a specific school to override the request
-    if (isAdmin) {
-        const overrideId = req.query.schoolId || req.body.SCHOOL_ID || req.body.draftData?.SCHOOL_ID;
-        if (overrideId) return parseInt(overrideId, 10);
-        return null;
-    }
-
-    //Fallback to the school ID attached to their Auth0 user profile
-    return auth0SchoolId ? parseInt(auth0SchoolId, 10) : null;
+  const auth0SchoolId = user[SCHOOL_NAMESPACE];
+  //Check if they are admin via the schoolId claim
+  const isAdmin = auth0SchoolId === "Admin";
+  //If Admin, check if they sent a specific school to override the request
+  if (isAdmin) {
+    const overrideId = req.query.schoolId || req.body.SCHOOL_ID || req.body.draftData?.SCHOOL_ID;
+    if (overrideId) return parseInt(overrideId, 10);
+    return null;
+  }
+  //Fallback to the school ID attached to their Auth0 user profile
+  return auth0SchoolId ? parseInt(auth0SchoolId, 10) : null;
 }
 
 app.get("/belongsToSchool", (req, res) => {
@@ -1099,69 +1096,75 @@ app.get("/acceptanceRateAllTime", async (req, res) => {
 });
 
 app.post("/api/save-draft", async (req, res) => {
-    if (!client) return res.status(500).json({message: "No DB connection"});
-    try {
-        const benchmarkDb = client.db("School-Benchmark");
-        const userEmail = req.oidc?.user?.email;
-        const schoolID = getRequestSchoolId(req);
+  if (!client) return res.status(500).json({message: "No DB connection"});
+  try {
+    const benchmarkDb = client.db("School-Benchmark");
+    const userEmail = req.oidc?.user?.email;
+    const schoolID = getRequestSchoolId(req);
 
-        if (!userEmail || !schoolID) return res.status(400).json({message: "Missing identity data"});
+    if (!userEmail || !schoolID) return res.status(400).json({message: "Missing identity data"});
 
-        const {formType, draftData} = req.body;
-        if (!formType || !draftData) return res.status(400).json({message: "Missing required data"});
+    const {formType, draftData} = req.body;
+    if (!formType || !draftData) return res.status(400).json({message: "Missing required data"});
 
-        await benchmarkDb.collection("FormDrafts").updateOne(
-            {
-                USER_EMAIL: userEmail,
-                FORM_TYPE: formType,
-                SCHOOL_YR_ID: draftData.SCHOOL_YR_ID,
-                GRADE_DEF_ID: draftData.GRADE_DEF_ID,
-                SCHOOL_ID: schoolID
-            },
-            {$set: {DRAFT_DATA: draftData, UPDATED_AT: Date.now()}},
-            {upsert: true}
-        );
-        res.status(200).json({message: "Successfully saved draft data"});
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({message: "Error updating data"});
-    }
+    const schoolYearId = parseInt(draftData.SCHOOL_YR_ID, 10);
+    const gradeDefId = draftData.GRADE_DEF_ID ? parseInt(draftData.GRADE_DEF_ID, 10) : null;
+
+    const filter: any = {
+      USER_EMAIL: userEmail,
+      FORM_TYPE: formType,
+      SCHOOL_YR_ID: schoolYearId,
+      SCHOOL_ID: schoolID
+    };
+    //Only add GRADE_DEF_ID to the filter if it actually belongs to this form
+    if (gradeDefId) filter.GRADE_DEF_ID = gradeDefId;
+
+    await benchmarkDb.collection("FormDrafts").updateOne(
+        filter,
+        {$set: {DRAFT_DATA: draftData, UPDATED_AT: Date.now()}},
+        {upsert: true}
+    );
+    res.status(200).json({message: "Successfully saved draft data"});
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({message: "Error updating data"});
+  }
 });
 
 app.get("/api/get-draft", async (req, res) => {
-    if (!client) return res.status(500).json({message: "No DB connection"});
-    try {
-        const benchmarkDb = client.db("School-Benchmark");
-        const userEmail = req.oidc?.user?.email;
-        const schoolID = getRequestSchoolId(req);
+  if (!client) return res.status(500).json({message: "No DB connection"});
+  try {
+    const benchmarkDb = client.db("School-Benchmark");
+    const userEmail = req.oidc?.user?.email;
+    const schoolID = getRequestSchoolId(req);
 
-        if (!userEmail || !schoolID) return res.status(400).json({message: "Missing identity data"});
+    if (!userEmail || !schoolID) return res.status(400).json({message: "Missing identity data"});
 
-        const formType = req.query.formType as string;
-        const schoolYearId = parseInt(req.query.SCHOOL_YR_ID as string, 10);
-        const gradeDefId = parseInt(req.query.GRADE_DEF_ID as string, 10) || null;
+    const formType = req.query.formType as string;
+    const schoolYearId = parseInt(req.query.SCHOOL_YR_ID as string, 10);
+    const gradeDefId = req.query.GRADE_DEF_ID ? parseInt(req.query.GRADE_DEF_ID as string, 10) : null;
 
-        if (!formType || !schoolYearId) return res.status(400).json({message: "Missing required data"});
+    if (!formType || !schoolYearId) return res.status(400).json({message: "Missing required data"});
 
-        const filter: any = {
-            USER_EMAIL: userEmail,
-            FORM_TYPE: formType,
-            SCHOOL_YR_ID: schoolYearId,
-            SCHOOL_ID: schoolID
-        };
-        if (gradeDefId) filter.GRADE_DEF_ID = gradeDefId;
+    const filter: any = {
+      USER_EMAIL: userEmail,
+      FORM_TYPE: formType,
+      SCHOOL_YR_ID: schoolYearId,
+      SCHOOL_ID: schoolID
+    };
+    if (gradeDefId) filter.GRADE_DEF_ID = gradeDefId;
 
-        const draftDocument = await benchmarkDb.collection("FormDrafts").findOne(filter, {
-            projection: {
-                DRAFT_DATA: 1,
-                _id: 0
-            }
-        });
-        res.status(200).json(draftDocument?.DRAFT_DATA || null);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({message: "Error getting draft data"});
-    }
+    const draftDocument = await benchmarkDb.collection("FormDrafts").findOne(filter, {
+      projection: {
+        DRAFT_DATA: 1,
+        _id: 0
+      }
+    });
+    res.status(200).json(draftDocument?.DRAFT_DATA || null);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({message: "Error getting draft data"});
+  }
 });
 
 ViteExpress.listen(app, 3000, async () => {
