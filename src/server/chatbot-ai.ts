@@ -14,12 +14,15 @@ const configPrompts = JSON.parse(fs.readFileSync("./src/server/prompt-config.jso
 const AI_PROVIDER: "gemini" | "ollama" = "ollama";
 const OLLAMA_MODEL = "gpt-oss:120b";
 const MAX_RETRY_ATTEMPTS = 3; // Maximum number of query retry attempts
+
 const ollama = new Ollama({
     host: "https://ollama.com",
     headers: {
         Authorization: "Bearer " + process.env.OLLAMA_API_KEY,
     },
 });
+
+// Custom claim key in Auth user object (req.oidc.user)
 const SCHOOL_NAMESPACE = "https://cs4241-school-benchmarking-project-1.onrender.com/schoolId";
 
 let db: Db | undefined;
@@ -47,7 +50,9 @@ function compilePrompt(promptObj: Record<string, any>): string {
 
     // KPI formulas e.g. acceptance rate, yield rate, attrition rate
     if (promptObj.kpiFormulas && typeof promptObj.kpiFormulas === "object") {
-        const lines = Object.entries(promptObj.kpiFormulas).map(([k, v]) => `  ${k} = ${v}`).join("\n");
+        const lines = Object.entries(promptObj.kpiFormulas)
+            .map(([k, v]) => `  ${k} = ${v}`)
+            .join("\n");
         parts.push("KPI FORMULAS - use these when a user asks about rates, ratios, or performance:\n" + lines);
     }
 
@@ -58,7 +63,9 @@ function compilePrompt(promptObj: Record<string, any>): string {
 
     // Maps raw field names like COMPLETED_APPLICATION_TOTAL to human readable labels
     if (promptObj.fieldTranslations && typeof promptObj.fieldTranslations === "object") {
-        const lines = Object.entries(promptObj.fieldTranslations).map(([k, v]) => `  ${k} = ${v}`).join("\n");
+        const lines = Object.entries(promptObj.fieldTranslations)
+            .map(([k, v]) => `  ${k} = ${v}`)
+            .join("\n");
         parts.push("Field name translations - always use these when describing data:\n" + lines);
     }
 
@@ -186,10 +193,7 @@ async function callAIWithHistory(systemPrompt: string, history: any[], message: 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: [
-            ...(Array.isArray(history) ? history : []),
-            { role: "user", parts: [{ text: message }] },
-        ],
+        contents: [...(Array.isArray(history) ? history : []), { role: "user", parts: [{ text: message }] }],
         config: { systemInstruction: systemPrompt },
     });
 
@@ -230,13 +234,17 @@ async function classifyQuestion(question: string, history: any[], isAdmin: boole
     const classifierPrompt = compilePrompt(userPrompts.classifier);
 
     // Include recent history context for follow-up detection
-    const historyContext = history.length > 0
-        ? `\n\nRecent conversation:\n${history.slice(-4).map((h: any) => {
-            const role = h.role === "model" ? "Assistant" : "User";
-            const text = h.parts?.[0]?.text ?? h.content ?? "";
-            return `${role}: ${text}`;
-        }).join("\n")}`
-        : "";
+    const historyContext =
+        history.length > 0
+            ? `\n\nRecent conversation:\n${history
+                .slice(-4)
+                .map((h: any) => {
+                    const role = h.role === "model" ? "Assistant" : "User";
+                    const text = h.parts?.[0]?.text ?? h.content ?? "";
+                    return `${role}: ${text}`;
+                })
+                .join("\n")}`
+            : "";
 
     const classifierMessage = `Question: ${question}${historyContext}`;
 
@@ -342,14 +350,18 @@ async function validateAnswer(
     const userPrompts = isAdmin ? configPrompts.admin : configPrompts.schoolUser;
     const validatorPrompt = compilePrompt(userPrompts.validator);
 
-    const validatorHistoryContext = history.length > 0
-        ? `\n\nRecent conversation (use this to verify the correct school, year, or entity is being addressed):\n` +
-        history.slice(-4).map((h: any) => {
-            const role = h.role === "model" ? "Assistant" : "User";
-            const text = h.parts?.[0]?.text ?? h.content ?? "";
-            return `${role}: ${text}`;
-        }).join("\n")
-        : "";
+    const validatorHistoryContext =
+        history.length > 0
+            ? `\n\nRecent conversation (use this to verify the correct school, year, or entity is being addressed):\n` +
+            history
+                .slice(-4)
+                .map((h: any) => {
+                    const role = h.role === "model" ? "Assistant" : "User";
+                    const text = h.parts?.[0]?.text ?? h.content ?? "";
+                    return `${role}: ${text}`;
+                })
+                .join("\n")
+            : "";
 
     const validationMessage = `
 Original question: ${question}${validatorHistoryContext}
@@ -374,7 +386,7 @@ Validate whether the answer correctly interprets the data (correct KPI formulas,
             console.warn("[validateAnswer] Received empty response from AI validator");
             return {
                 isValid: true,
-                reasoning: "Validator returned empty response, defaulting to valid"
+                reasoning: "Validator returned empty response, defaulting to valid",
             };
         }
 
@@ -384,14 +396,14 @@ Validate whether the answer correctly interprets the data (correct KPI formulas,
         return {
             isValid: validation.isValid ?? true,
             reasoning: validation.reasoning ?? "No reasoning provided",
-            suggestedFix: validation.suggestedFix
+            suggestedFix: validation.suggestedFix,
         };
     } catch (err: any) {
         console.error("[validateAnswer] Validation error:", err);
         console.error("[validateAnswer] Error details:", err.message);
         return {
             isValid: true,
-            reasoning: "Validation failed, defaulting to valid"
+            reasoning: "Validation failed, defaulting to valid",
         };
     }
 }
@@ -424,20 +436,25 @@ async function generateQueryWithRetry(
 
     // Build conversation history context so the query generator can resolve
     // references like "the school" or "its id" from prior turns.
-    const historyContext = history.length > 0
-        ? `\n\nRecent conversation (use this to resolve any ambiguous references like "the school", "its", "that" etc.):\n` +
-        history.slice(-6).map((h: any) => {
-            const role = h.role === "model" ? "Assistant" : "User";
-            const text = h.parts?.[0]?.text ?? h.content ?? "";
-            return `${role}: ${text}`;
-        }).join("\n")
-        : "";
+    const historyContext =
+        history.length > 0
+            ? `\n\nRecent conversation (use this to resolve any ambiguous references like "the school", "its", "that" etc.):\n` +
+            history
+                .slice(-6)
+                .map((h: any) => {
+                    const role = h.role === "model" ? "Assistant" : "User";
+                    const text = h.parts?.[0]?.text ?? h.content ?? "";
+                    return `${role}: ${text}`;
+                })
+                .join("\n")
+            : "";
 
-    const scopeHint = !isAdmin && schoolId !== undefined
-        ? `\n\nACCESS SCOPE:\n- This user can only access SCHOOL_ID=${schoolId}.\n- If the question asks for overall averages/benchmarks across all schools, return only aggregate results with no per-school breakdown and no school names/IDs.\n`
-        : "";
+    const scopeHint =
+        !isAdmin && Number.isFinite(schoolId as number)
+            ? `\n\nACCESS SCOPE:\n- This user can only access SCHOOL_ID=${schoolId}.\n- If the question asks for overall averages/benchmarks across all schools, return only aggregate results with no per-school breakdown and no school names/IDs.\n`
+            : "";
 
-    let queryMessage = previousAttempt
+    const queryMessage = previousAttempt
         ? `
 Previous query attempt FAILED with this plan:
 ${JSON.stringify(previousAttempt.queryPlan, null, 2)}
@@ -446,6 +463,7 @@ Error encountered: ${previousAttempt.error}
 
 Please generate a DIFFERENT query approach for this question: ${question}
 ${historyContext}
+${scopeHint}
 
 ${previousAttempt.queryPlan.suggestedFix || "Try a different collection, operation type, or query structure."}
 `
@@ -467,21 +485,18 @@ ${previousAttempt.queryPlan.suggestedFix || "Try a different collection, operati
 }
 
 // Main pipeline: Orchestrates the entire question-answering process with retry and validation logic
-// Steps: 1) Classify question, 2) Generate and execute query with retries (including empty results),
-// 3) Handle errors/empty results after all retries, 4) Generate answer from results,
-// 5) Validate answer accuracy, 6) Retry if validation fails
 async function answerWithData(
     question: string,
     history: any[],
     isAdmin: boolean,
     signal?: AbortSignal,
     validationAttempt: number = 0,
-    // When retrying after a failed validation, pass the last successful queryPlan
-    // so the query generator has context instead of treating the question as new.
     priorQueryPlan: QueryPlan | null = null,
     schoolId?: number
 ): Promise<{ reply: string; queryPlan: QueryPlan | null; validation?: ValidationResult }> {
-    console.log(`[answerWithData] Question: "${question}" | isAdmin: ${isAdmin} | history: ${history.length} turn(s) | validationAttempt: ${validationAttempt}`);
+    console.log(
+        `[answerWithData] Question: "${question}" | isAdmin: ${isAdmin} | history: ${history.length} turn(s) | validationAttempt: ${validationAttempt}`
+    );
 
     assertNotAborted(signal);
 
@@ -500,11 +515,6 @@ async function answerWithData(
         return { reply, queryPlan: null };
     }
 
-    // STEP 2: Generate and execute query with retry logic for both errors AND empty results.
-    // On every attempt after the first, the previous queryPlan and failure reason are passed
-    // back to the AI so it can try a meaningfully different approach.
-    // On validation retries, seed queryPlan from the last successful plan so the query
-    // generator sees the prior approach and doesn't blindly return needsData: false.
     let queryPlan: QueryPlan | null = priorQueryPlan;
     let results: any[] = [];
     let queryError: string | null = null;
@@ -517,17 +527,15 @@ async function answerWithData(
         assertNotAborted(signal);
 
         try {
-            // Build previousAttempt context whenever we have a prior plan, regardless of
-            // whether the last attempt threw an error or simply returned 0 results.
             const previousAttempt = queryPlan
                 ? {
                     queryPlan,
-                    error: queryError
-                        ?? `Query returned 0 results. Try a different approach — for example, loosening filters, checking field names, trying a different collection, or using a simpler pipeline.`,
+                    error:
+                        queryError ??
+                        `Query returned 0 results. Try a different approach — for example, loosening filters, checking field names, trying a different collection, or using a simpler pipeline.`,
                 }
                 : undefined;
 
-            // Reset error before each new attempt
             queryError = null;
 
             const globalQ = !isAdmin && isGlobalBenchQuestion(question);
@@ -542,8 +550,8 @@ async function answerWithData(
                 return { reply, queryPlan: null };
             }
 
-            if (!isAdmin && schoolId !== undefined) {
-                queryPlan = enforceSchoolScope(queryPlan, schoolId, globalQ);
+            if (!isAdmin && Number.isFinite(schoolId as number)) {
+                queryPlan = enforceSchoolScope(queryPlan, schoolId as number, globalQ);
             }
 
             console.log(`[executeQuery] Collection: "${queryPlan.collection}" Operation: "${queryPlan.operation}"`);
@@ -556,15 +564,12 @@ async function answerWithData(
                 results = sanitizeGlobalResults(results);
             }
 
-            // Only break out of the retry loop if we actually got results
             if (results.length > 0) {
                 break;
             }
 
             console.log(`[answerWithData] Attempt ${attempt} returned 0 results, retrying with different query...`);
-
         } catch (err: any) {
-            // Re-throw abort errors immediately so the route handler can respond properly
             if (err?.message === "Request aborted by client") throw err;
 
             queryError = err?.message ?? "Unknown error";
@@ -581,19 +586,21 @@ async function answerWithData(
     // STEP 3: Handle hard query execution error after all retries
     if (queryError) {
         const errorMessage = `I tried ${MAX_RETRY_ATTEMPTS} different approaches to retrieve the data but encountered errors each time. ${
-            results.length === 0
-                ? "Could you rephrase your question or provide more specific details?"
-                : "However, I was able to retrieve some partial results."
+            results.length === 0 ? "Could you rephrase your question or provide more specific details?" : "However, I was able to retrieve some partial results."
         }`;
 
         if (results.length > 0) {
-            const errorHistoryContext = history.length > 0
-                ? `\n\nConversation history:\n${history.slice(-4).map((h: any) => {
-                    const role = h.role === "model" ? "Assistant" : "User";
-                    const text = h.parts?.[0]?.text ?? h.content ?? "";
-                    return `${role}: ${text}`;
-                }).join("\n")}`
-                : "";
+            const errorHistoryContext =
+                history.length > 0
+                    ? `\n\nConversation history:\n${history
+                        .slice(-4)
+                        .map((h: any) => {
+                            const role = h.role === "model" ? "Assistant" : "User";
+                            const text = h.parts?.[0]?.text ?? h.content ?? "";
+                            return `${role}: ${text}`;
+                        })
+                        .join("\n")}`
+                    : "";
             const dataContext = `Query results (${results.length} record${results.length === 1 ? "" : "s"}):\n${JSON.stringify(results, null, 2)}`;
             const interpreterMessage = `User question: ${question}${errorHistoryContext}\n\n${dataContext}\n\nNote: This data may be incomplete due to query issues.`;
             const reply = await callAI(interpreterSystemPrompt, interpreterMessage, signal);
@@ -603,15 +610,19 @@ async function answerWithData(
         return { reply: errorMessage, queryPlan };
     }
 
-    // STEP 4: No results found after exhausting all retry attempts — tell the user clearly
+    // STEP 4: No results found after exhausting all retry attempts
     if (results.length === 0) {
-        const noResultsHistoryContext = history.length > 0
-            ? `\n\nConversation history:\n${history.slice(-4).map((h: any) => {
-                const role = h.role === "model" ? "Assistant" : "User";
-                const text = h.parts?.[0]?.text ?? h.content ?? "";
-                return `${role}: ${text}`;
-            }).join("\n")}`
-            : "";
+        const noResultsHistoryContext =
+            history.length > 0
+                ? `\n\nConversation history:\n${history
+                    .slice(-4)
+                    .map((h: any) => {
+                        const role = h.role === "model" ? "Assistant" : "User";
+                        const text = h.parts?.[0]?.text ?? h.content ?? "";
+                        return `${role}: ${text}`;
+                    })
+                    .join("\n")}`
+                : "";
         const reply = await callAI(
             interpreterSystemPrompt,
             `User question: ${question}${noResultsHistoryContext}\n\nAll ${MAX_RETRY_ATTEMPTS} query attempts returned no results. Let the user know nothing was found and suggest why that might be (e.g., school name spelled incorrectly, no data for that year, grade level name may differ in the database, etc.).`,
@@ -622,13 +633,17 @@ async function answerWithData(
 
     // STEP 5: Generate initial answer from results
     const dataContext = `Query results (${results.length} record${results.length === 1 ? "" : "s"}):\n${JSON.stringify(results, null, 2)}`;
-    const historyContext = history.length > 0
-        ? `\n\nConversation history:\n${history.slice(-4).map((h: any) => {
-            const role = h.role === "model" ? "Assistant" : "User";
-            const text = h.parts?.[0]?.text ?? h.content ?? "";
-            return `${role}: ${text}`;
-        }).join("\n")}`
-        : "";
+    const historyContext =
+        history.length > 0
+            ? `\n\nConversation history:\n${history
+                .slice(-4)
+                .map((h: any) => {
+                    const role = h.role === "model" ? "Assistant" : "User";
+                    const text = h.parts?.[0]?.text ?? h.content ?? "";
+                    return `${role}: ${text}`;
+                })
+                .join("\n")}`
+            : "";
 
     const interpreterMessage = `User question: ${question}${historyContext}\n\n${dataContext}`;
     let reply = await callAI(interpreterSystemPrompt, interpreterMessage, signal);
@@ -636,12 +651,9 @@ async function answerWithData(
     assertNotAborted(signal);
 
     // STEP 6: Validate the answer.
-    //
-    // Skip validation for pure list/display requests (e.g. "list all those ids",
-    // "show me all schools").  These questions have no KPI calculation to verify,
-    // and passing 50 raw records to the validator reliably causes hallucinations
-    // about "missing" or "duplicate" entries that simply don't exist.
-    const isDisplayOnlyRequest = /^\s*(list|show|display|give me|what are|can you (list|show)|tell me).{0,60}(all|those|the).{0,40}(ids?|names?|schools?|records?)\s*\??\s*$/i.test(question);
+    const isDisplayOnlyRequest = /^\s*(list|show|display|give me|what are|can you (list|show)|tell me).{0,60}(all|those|the).{0,40}(ids?|names?|schools?|records?)\s*\??\s*$/i.test(
+        question
+    );
 
     if (isDisplayOnlyRequest) {
         console.log("[answerWithData] Display-only request detected — skipping validation to prevent hallucination");
@@ -654,15 +666,16 @@ async function answerWithData(
         assertNotAborted(signal);
 
         if (!validation.isValid) {
-            console.log(`[answerWithData] Answer validation failed (attempt ${validationAttempt + 1}/${MAX_RETRY_ATTEMPTS}), regenerating with query context`);
+            console.log(
+                `[answerWithData] Answer validation failed (attempt ${validationAttempt + 1}/${MAX_RETRY_ATTEMPTS}), regenerating with query context`
+            );
 
             if (validation.suggestedFix && queryPlan) {
                 (queryPlan as any).suggestedFix = validation.suggestedFix;
             }
 
-            // Pass the current queryPlan into the next attempt via history augmentation
-            // so the query generator doesn't lose context and return needsData: false.
-            return answerWithData(question, history, isAdmin, signal, validationAttempt + 1, queryPlan);
+            // IMPORTANT: keep schoolId on retries
+            return answerWithData(question, history, isAdmin, signal, validationAttempt + 1, queryPlan, schoolId);
         }
 
         console.log(`[answerWithData] Final answer generated (valid=${validation.isValid})`);
@@ -671,20 +684,17 @@ async function answerWithData(
         console.log(`[answerWithData] Max validation attempts (${MAX_RETRY_ATTEMPTS}) reached, accepting answer despite validation concerns`);
         const validation: ValidationResult = {
             isValid: false,
-            reasoning: "Maximum validation attempts reached, answer accepted by default"
+            reasoning: "Maximum validation attempts reached, answer accepted by default",
         };
         return { reply, queryPlan, validation };
     }
 }
 
 function isGlobalBenchQuestion(q: string): boolean {
-    // Simple heuristic; keep it conservative.
-    // Add words as you see real queries.
     return /\b(average|avg|overall|across all schools|all schools|benchmark|mean|median|percentile)\b/i.test(q);
 }
 
 function enforceSchoolScope(queryPlan: QueryPlan, schoolId: number, isGlobal: boolean): QueryPlan {
-    // If global: allow cross-school query, but we’ll still sanitize outputs later.
     if (isGlobal) return queryPlan;
 
     const qp: QueryPlan = JSON.parse(JSON.stringify(queryPlan));
@@ -709,7 +719,23 @@ function enforceSchoolScope(queryPlan: QueryPlan, schoolId: number, isGlobal: bo
     }
 
     if (qp.operation === "aggregate") {
-        qp.pipeline = [{ $match: { SCHOOL_ID: schoolId } }, ...(qp.pipeline ?? [])];
+        // Remove placeholder school-name matches that cause 0 results
+        const cleaned = (qp.pipeline ?? [])
+            .map((stage) => {
+                if (!stage?.$match) return stage;
+
+                const m = { ...stage.$match };
+                delete m["school.NAME_TX"];
+                delete m["school.ID"];
+                delete m["schoolId"];
+                delete m["name"];
+                delete m["NAME_TX"];
+
+                return Object.keys(m).length ? { $match: m } : null;
+            })
+            .filter(Boolean);
+
+        qp.pipeline = [{ $match: { SCHOOL_ID: schoolId } }, ...(cleaned as any[])];
         return qp;
     }
 
@@ -717,60 +743,66 @@ function enforceSchoolScope(queryPlan: QueryPlan, schoolId: number, isGlobal: bo
 }
 
 function sanitizeGlobalResults(results: any[]): any[] {
-    // Remove obvious school identifiers so interpreter can’t leak other schools.
-    // Safe even if fields don’t exist.
     return results.map((doc) => {
         if (!doc || typeof doc !== "object") return doc;
         const copy = JSON.parse(JSON.stringify(doc));
 
-        // Remove common school-identifying fields
         delete copy.SCHOOL_ID;
         delete copy.schoolId;
         delete copy.schoolID;
         delete copy.school;
         delete copy.schoolName;
-        delete copy.NAME_TX; // sometimes school name in joined output
-        delete copy.name;    // often used as school name in your sample pipelines
+        delete copy.NAME_TX;
+        delete copy.name;
 
         return copy;
     });
 }
 
 // Express route handler: Processes chat messages and returns AI-generated responses
-// Accepts message text, conversation history, and admin flag
 router.post("/chat", async (req, res) => {
-    const { message, history} = req.body;
-    const user = req.oidc.user;
-    if(!user || !db) {
-        return res.status(404).json({message: "User not found"});
+    const { message, history } = req.body;
+
+    const user = (req as any).oidc?.user;
+    if (!user) {
+        return res.status(401).json({ error: "User not found" });
+    }
+    if (!db) {
+        return res.status(500).json({ error: "Database not connected" });
     }
 
-    const schoolId: string = user[SCHOOL_NAMESPACE] || "";
+    // Admin: derived from server-side context if you have it set; otherwise it will be false.
+    // Do NOT trust req.body.isAdmin.
     const isAdmin = !!(req as any).user?.isAdmin;
+
+    const rawSchoolId = user?.[SCHOOL_NAMESPACE];
+    const schoolId =
+        typeof rawSchoolId === "number" ? rawSchoolId : typeof rawSchoolId === "string" ? Number(rawSchoolId) : NaN;
 
     console.log("[chat] message:", message);
     console.log("[chat] history length:", history?.length ?? 0);
     console.log("[chat] isAdmin:", isAdmin);
-    console.log("[chat auth]", { isAdmin, schoolId });
+    console.log("[chat auth raw schoolId]", rawSchoolId);
+    console.log("[chat auth parsed]", { isAdmin, schoolId });
 
     if (!message || typeof message !== "string") {
         res.status(400).json({ error: "Missing or invalid message" });
         return;
     }
 
-    // Enforce that non-admin users must have a schoolId in context
-    if (!isAdmin && (schoolId === undefined || schoolId === null)) {
-        res.status(400).json({ error: "Missing schoolId for school user" });
+    // Enforce that non-admin users must have a valid schoolId in token claims
+    if (!isAdmin && !Number.isFinite(schoolId)) {
+        res.status(403).json({ error: "Missing schoolId for school user" });
         return;
     }
 
-    const rankingReq =
-        /\b(top|bottom|rank|ranking|best|worst)\b/i.test(message) &&
-        /\bschools?\b/i.test(message);
+    // Block ranking queries for school users (they would leak other schools)
+    const rankingReq = /\b(top|bottom|rank|ranking|best|worst)\b/i.test(message) && /\bschools?\b/i.test(message);
 
     if (!isAdmin && rankingReq) {
         res.status(200).json({
-            reply: "I can’t rank or list other schools for school users. I can tell you your school’s yield rate, or the average yield rate across all schools—tell me which you want.",
+            reply:
+                "I can’t rank or list other schools for school users. I can tell you your school’s yield rate, or the average yield rate across all schools—tell me which you want.",
             queryPlan: null,
             validation: null,
         });
@@ -783,14 +815,18 @@ router.post("/chat", async (req, res) => {
         const { reply, queryPlan, validation } = await answerWithData(
             message,
             history ?? [],
-            !!isAdmin,
-            abortController.signal
+            isAdmin,
+            abortController.signal,
+            0,
+            null,
+            Number.isFinite(schoolId) ? schoolId : undefined
         );
+
         if (!res.headersSent) {
             res.status(200).json({
                 reply,
                 queryPlan: queryPlan ?? null,
-                validation: validation ?? null
+                validation: validation ?? null,
             });
         }
     } catch (err: any) {
