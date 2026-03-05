@@ -27,10 +27,11 @@ const INITIAL_FORM_STATE = {
     ...Object.fromEntries(ALL_FIELDS.map(field => [field.name, ""]))
 };
 
-export default function EmployeeForm() {
-    const { schoolYears, loading, submitStatus, fetchAutofillData, submitForm, resetSubmitStatus } = useSchoolDataForm({
+export default function EmployeeForm({ schoolId }: { schoolId: string }) {
+    const { schoolYears, loading, submitStatus, fetchAutofillData, submitForm, saveDraft, loadDraft, resetSubmitStatus } = useSchoolDataForm({
         endpoint: '/api/submit-employee',
-        dataEndpoint: '/api/employee-data'
+        dataEndpoint: '/api/employee-data',
+        schoolId
     });
 
     const [formData, setFormData] = useState(INITIAL_FORM_STATE);
@@ -49,7 +50,7 @@ export default function EmployeeForm() {
                 }
             });
         }
-    }, [formData.SCHOOL_YR_ID]);
+    }, [formData.SCHOOL_YR_ID, schoolId]);
 
     useEffect(() => {
         if (submitStatus === 'success') {
@@ -72,9 +73,33 @@ export default function EmployeeForm() {
         return false;
     };
 
+    const handleSaveDraft = async () => {
+        if (!formData.SCHOOL_YR_ID) {
+            alert("Please select a Year to save a draft.");
+            return;
+        }
+        const result = await saveDraft("Employee", formData);
+        if (result.success) alert("Draft saved successfully!");
+    };
+
+    const handleLoadDraft = async () => {
+        if (!formData.SCHOOL_YR_ID) {
+            alert("Please select a Year to load its draft.");
+            return;
+        }
+        const data = await loadDraft("Employee", formData.SCHOOL_YR_ID);
+        if (data) {
+            setFormData(prev => ({ ...prev, ...data }));
+            alert("Draft loaded!");
+        } else {
+            alert("No draft found for this year.");
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         if (hasValidationErrors()) return;
+
         const result = await submitForm(formData);
         if (result.success) setFormData(INITIAL_FORM_STATE);
     };
@@ -94,7 +119,7 @@ export default function EmployeeForm() {
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
-            <h2 className="text-2xl font-semibold text-[#1E3869]">Personnel Data</h2>
+            <h2 className="text-2xl font-semibold text-[#1E3869]">Employee Data</h2>
             <p className="text-gray-600 text-sm">Track employee headcounts, FTEs, and administrative support staff.</p>
 
             {submitStatus === 'success' && (
@@ -108,11 +133,11 @@ export default function EmployeeForm() {
                     <span>Error saving data. Please try again.</span>
                 </div>
             )}
-            
+
             <DropdownSection
                 schoolYears={schoolYears}
                 grades={[]}
-                formData={formData}
+                formData={formData as any}
                 onChange={handleChange}
                 showGrade={false}
             />
@@ -152,9 +177,27 @@ export default function EmployeeForm() {
                 </div>
             ))}
 
-            <div className="flex justify-end pt-6">
-                <button type="submit" className="bg-[#0693E3] text-white px-8 py-3 rounded font-semibold hover:bg-blue-600 transition-colors shadow-sm">
-                    Save Employee Data
+            <div className="flex justify-end pt-6 gap-3">
+                <button
+                    type="button"
+                    onClick={handleLoadDraft}
+                    className="bg-gray-200 text-gray-700 px-6 py-3 rounded font-semibold hover:bg-gray-300 transition-colors shadow-sm"
+                >
+                    Load Draft
+                </button>
+                <button
+                    type="button"
+                    onClick={handleSaveDraft}
+                    className="bg-white border-2 border-[#0693E3] text-[#0693E3] px-6 py-3 rounded font-semibold hover:bg-blue-50 transition-colors shadow-sm"
+                >
+                    Save Draft
+                </button>
+                <button
+                    type="submit"
+                    disabled={loading}
+                    className="bg-[#0693E3] text-white px-8 py-3 rounded font-semibold hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                >
+                    {loading ? 'Saving...' : 'Save Employee Data'}
                 </button>
             </div>
         </form>

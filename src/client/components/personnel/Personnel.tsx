@@ -1,142 +1,110 @@
 import { useEffect, useState } from "react";
 import Button from "../../elements/Button";
 import ButtonTab from "../../components/ButtonTab";
-import EnrollAttritionGraphs from "./EnrollAttritionGraphs";
-import TogglePill from "../../elements/TogglePill"
+import PersonnelGraphs from "./PersonnelGraphs";
 
-export type School = { NAME_TX: string; ID: number; };
-export type Year = { SCHOOL_YEAR: string; ID: number; };
+export type Grade = { ID: number; DESCRIPTION_TX: string; }
+export type School = { NAME_TX: string; ID: number; }
+export type Year = { SCHOOL_YEAR: string; ID: number; }
 
-export type EnrollChartConfig = {
+export type ChartConfig = {
     id: number;
     schoolSelection: string;
     yearSelection: string;
-    chartType: string;
+    gradeSelection: string;
     secondaryLabel: string;
-    secondaryField: string;
+    chartType: string;
     secondaryChartType: string;
-};
+}
 
-export const TABS: { label: string; field: string }[] = [
-    { label: "Students Added During Year",      field: "STUDENTS_ADDED_DURING_YEAR" },
-    { label: "Students Graduated",              field: "STUDENTS_GRADUATED" },
-    { label: "Students Dismissed/Withdrawn",    field: "STUD_DISS_WTHD" },
-    { label: "Students Not Returning",          field: "STUD_NOT_RETURN" },
-    { label: "Students Not Invited to Return",  field: "STUD_NOT_INV" },
-    { label: "Exchange Students",               field: "EXCH_STUD_REPTS" },
-];
-
-export default function EnrollAttrition() {
+export default function Personnel() {
     const [schools, setSchools] = useState<School[]>([]);
-    const [years, setYears]     = useState<Year[]>([]);
+    const [years, setYears] = useState<Year[]>([]);
+    const [grades, setGrades] = useState<Grade[]>([]);
 
-    const [activeTab, setActiveTab]                               = useState<string>(TABS[0].label);
-    const [isSOC, setIsSOC]                                       = useState<boolean>(false);
-    const [globalChartType, setGlobalChartType]                   = useState<string>("bar");
+    const [activeTab, setActiveTab] = useState<string>("Total Teacher FTEs");
+
+    const [globalChartType, setGlobalChartType] = useState<string>("line");
     const [globalSecondaryChartType, setGlobalSecondaryChartType] = useState<string>("line");
 
-    const [charts, setCharts] = useState<EnrollChartConfig[]>([
-        {
-            id: Date.now(),
-            schoolSelection: "",
-            yearSelection: "",
-            chartType: "bar",
-            secondaryLabel: "",
-            secondaryField: "",
-            secondaryChartType: "line",
-        },
+    const [charts, setCharts] = useState<ChartConfig[]>([
+        { id: Date.now(), schoolSelection: "", yearSelection: "", gradeSelection: "", secondaryLabel: "", chartType: "line", secondaryChartType: "line" }
     ]);
 
+    const tabs = ["Total Teacher FTEs", "Total FTEs", "Teachers Lost", "Teachers Gained"];
+
     useEffect(() => {
-        if (schools.length === 0)
-            fetch("/schools").then(r => r.json()).then(d => setSchools(d.filter((s: School) => !Number(s.NAME_TX))));
-        if (years.length === 0)
-            fetch("/years").then(r => r.json()).then(d => setYears(d));
+        if (schools.length === 0) fetch("/schools").then(res => res.json()).then(data => setSchools(data.filter((s: School) => !Number(s.NAME_TX))));
+        if (years.length === 0) fetch("/years").then(res => res.json()).then(data => setYears(data));
+        if (grades.length === 0) fetch("/grades").then(res => res.json()).then(data => setGrades(data));
     }, []);
 
     useEffect(() => {
-        setCharts(prev =>
-            prev.map(c =>
-                c.secondaryLabel === activeTab ? { ...c, secondaryLabel: "", secondaryField: "" } : c
-            )
-        );
+        setCharts(prev => prev.map(chart => (chart.secondaryLabel === activeTab ? { ...chart, secondaryLabel: "" } : chart)));
     }, [activeTab]);
-
-    const collection  = isSOC ? "EnrollAttritionSOC" : "EnrollAttrition";
-    const activeField = TABS.find(t => t.label === activeTab)?.field ?? "";
 
     const handleGlobalChartTypeChange = (newType: string) => {
         setGlobalChartType(newType);
-        setCharts(prev => prev.map(c => ({ ...c, chartType: newType })));
+        setCharts(charts.map(chart => ({ ...chart, chartType: newType })));
     };
 
     const handleGlobalSecondaryChartTypeChange = (newType: string) => {
         setGlobalSecondaryChartType(newType);
-        setCharts(prev => prev.map(c => ({ ...c, secondaryChartType: newType })));
-    };
-
-    const addChart = () => {
-        if (charts.length < 4) {
-            setCharts(prev => [...prev, {
-                id: Date.now(),
-                schoolSelection: "",
-                yearSelection: "",
-                chartType: globalChartType,
-                secondaryLabel: "",
-                secondaryField: "",
-                secondaryChartType: globalSecondaryChartType,
-            }]);
-        }
-    };
-
-    const updateChart = (updated: EnrollChartConfig) => {
-        setCharts(prev => prev.map(c => c.id === updated.id ? updated : c));
-    };
-
-    const removeChart = (id: number) => {
-        setCharts(prev => prev.filter(c => c.id !== id));
+        setCharts(charts.map(chart => ({ ...chart, secondaryChartType: newType })));
     };
 
     const clearChart = (id: number) => {
-        setCharts(prev => prev.map(c => c.id === id
-            ? { ...c, schoolSelection: "", yearSelection: "", secondaryLabel: "", secondaryField: "" }
+        setCharts(charts.map(c => c.id === id
+            ? { ...c, schoolSelection: "", yearSelection: "", gradeSelection: "", secondaryLabel: "" }
             : c
         ));
     };
 
     const clearAllCharts = () => {
-        setCharts(prev => prev.map(c => ({ ...c, schoolSelection: "", yearSelection: "", secondaryLabel: "", secondaryField: "" })));
+        setCharts(charts.map(c => ({ ...c, schoolSelection: "", yearSelection: "", gradeSelection: "", secondaryLabel: "" })));
+    };
+
+    const addChart = () => {
+        if (charts.length < 4) {
+            setCharts([...charts, {
+                id: Date.now(),
+                schoolSelection: "",
+                yearSelection: "",
+                gradeSelection: "",
+                secondaryLabel: "",
+                chartType: globalChartType,
+                secondaryChartType: globalSecondaryChartType
+            }]);
+        }
+    };
+
+    const updateChart = (updatedConfig: ChartConfig) => {
+        setCharts(charts.map(c => c.id === updatedConfig.id ? updatedConfig : c));
+    };
+
+    const removeChart = (id: number) => {
+        setCharts(charts.filter(c => c.id !== id));
     };
 
     const getGridLayout = () => {
         if (charts.length === 1) return "grid grid-cols-1 w-full max-w-5xl mx-auto gap-6";
-        return "grid grid-cols-1 lg:grid-cols-2 w-full gap-4";
+        return "grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 w-full gap-4";
     };
-
-    const isDualAxisCompatible = globalChartType === "line" || globalChartType === "bar";
 
     return (
         <div className="flex flex-col min-h-screen gap-4 p-4">
-            {/* Tab row + SOC toggle */}
-            <div className="flex flex-wrap items-end justify-between border-b-2 border-gray-200 pb-0">
-                <div className="flex flex-wrap space-x-2">
-                    {TABS.map(t => (
-                        <ButtonTab
-                            key={t.label}
-                            title={t.label}
-                            toggled={activeTab === t.label}
-                            switchTab={setActiveTab}
-                        />
-                    ))}
-                </div>
-
-                <div className="mb-1 mt-1 mr-1">
-                    <TogglePill label="SOC" value={isSOC} onChange={setIsSOC} />
-                </div>
+            <div className="flex flex-wrap space-x-2 border-b-2 border-gray-200 pb-0">
+                {tabs.map(tab => (
+                    <ButtonTab
+                        key={tab}
+                        title={tab}
+                        toggled={activeTab === tab}
+                        switchTab={setActiveTab}
+                    />
+                ))}
             </div>
 
             <div className="flex-1 mt-2">
-                {/* Global controls */}
                 <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-6 overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
                         <span className="text-xs font-semibold uppercase tracking-widest text-gray-400">Global Controls: Applies To All Charts</span>
@@ -178,7 +146,7 @@ export default function EnrollAttrition() {
                         </div>
 
                         {/* Dual Axis Layer — only for bar/line */}
-                        {isDualAxisCompatible && (
+                        {(globalChartType === "bar" || globalChartType === "line") && (
                             <div className="flex items-center gap-2">
                                 <span className="text-sm font-semibold text-gray-600 whitespace-nowrap">Dual-Axis Layer:</span>
                                 <div className="flex rounded-lg border border-orange-200 overflow-hidden">
@@ -201,21 +169,19 @@ export default function EnrollAttrition() {
                     </div>
                 </div>
 
-                {/* Chart grid */}
                 <div className={getGridLayout()}>
                     {charts.map((chart, index) => (
-                        <EnrollAttritionGraphs
+                        <PersonnelGraphs
                             key={chart.id}
                             config={chart}
                             updateConfig={updateChart}
                             removeChart={() => removeChart(chart.id)}
                             clearChart={() => clearChart(chart.id)}
                             label={activeTab}
-                            field={activeField}
-                            collection={collection}
+                            availableTabs={tabs}
                             schools={schools}
                             years={years}
-                            availableTabs={TABS}
+                            grades={grades}
                             showRemove={charts.length > 1}
                             chartNumber={index + 1}
                         />

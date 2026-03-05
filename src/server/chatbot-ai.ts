@@ -715,47 +715,61 @@ function isGlobalBenchQuestion(q: string): boolean {
 }
 
 function enforceSchoolScope(queryPlan: QueryPlan, schoolId: number, isGlobal: boolean): QueryPlan {
-    if (isGlobal) return queryPlan;
-
     const qp: QueryPlan = JSON.parse(JSON.stringify(queryPlan));
 
-    // If the model queries the School collection directly
-    if (qp.collection === "School") {
-        if (qp.operation === "find") {
-            qp.query = { $and: [qp.query ?? {}, { ID: schoolId }] };
-            return qp;
-        }
-        if (qp.operation === "aggregate") {
-            qp.pipeline = [{ $match: { ID: schoolId } }, ...(qp.pipeline ?? [])];
-            return qp;
+    // Global benchmark queries are allowed only as aggregate queries with no school identity exposure
+    if (isGlobal) {
+        if (qp.operation !== "aggregate") {
+            throw new Error("School users may only run aggregate queries for global benchmarks");
         }
         return qp;
     }
 
-    // Default: other collections should have SCHOOL_ID
+    if (qp.collection === "School") {
+        if (qp.operation === "find") {
+            qp.query = { ID: schoolId };
+            qp.projection = {
+                ...(qp.projection ?? {}),
+                ID: 1,
+                NAME_TX: 1,
+            };
+            return qp;
+        }
+
+        if (qp.operation === "aggregate") {
+            qp.pipeline = [
+                { $match: { ID: schoolId } },
+                ...((qp.pipeline ?? []).filter((stage) => !stage.$lookup && !stage.$match))
+            ];
+            return qp;
+        }
+
+        return qp;
+    }
+
     if (qp.operation === "find") {
-        qp.query = { $and: [qp.query ?? {}, { SCHOOL_ID: schoolId }] };
+        qp.query = { SCHOOL_ID: schoolId };
         return qp;
     }
 
     if (qp.operation === "aggregate") {
-        // Remove placeholder school-name matches that cause 0 results
-        const cleaned = (qp.pipeline ?? [])
-            .map((stage) => {
-                if (!stage?.$match) return stage;
+        const cleanedPipeline = (qp.pipeline ?? []).filter((stage) => {
+            if (!stage.$match) return true;
 
-                const m = { ...stage.$match };
-                delete m["school.NAME_TX"];
-                delete m["school.ID"];
-                delete m["schoolId"];
-                delete m["name"];
-                delete m["NAME_TX"];
+            const badKeys = [
+                "SCHOOL_ID",
+                "school.NAME_TX",
+                "school.ID",
+                "NAME_TX",
+                "ID",
+                "schoolId",
+                "name"
+            ];
 
-                return Object.keys(m).length ? { $match: m } : null;
-            })
-            .filter(Boolean);
+            return !Object.keys(stage.$match).some((k) => badKeys.includes(k));
+        });
 
-        qp.pipeline = [{ $match: { SCHOOL_ID: schoolId } }, ...(cleaned as any[])];
+        qp.pipeline = [{ $match: { SCHOOL_ID: schoolId } }, ...cleanedPipeline];
         return qp;
     }
 
@@ -779,6 +793,58 @@ function sanitizeGlobalResults(results: any[]): any[] {
     });
 }
 
+function escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isForbiddenSchoolLookupForSchoolUser(
+    message: string,
+    schoolId: number,
+    schoolName?: string
+): boolean {
+    const lower = message.toLowerCase();
+
+    // Block explicit school-id lookups unless it is their own id
+    const idMatches = [...lower.matchAll(/\bschool\s+id\s+(?:is\s+|which\s+is\s+|= \s*)?(\d+)\b/g)];
+    for (const match of idMatches) {
+        const requestedId = Number(match[1]);
+        if (requestedId !== schoolId) return true;
+    }
+
+    // Also catch "id 3", "school with id 3", etc.
+    const genericIdMatches = [...lower.matchAll(/\b(?:school\s+with\s+)?id\s+(\d+)\b/g)];
+    for (const match of genericIdMatches) {
+        const requestedId = Number(match[1]);
+        if (requestedId !== schoolId) return true;
+    }
+
+    // Block questions asking for school names by id
+    if (
+        /\b(name of (the )?school id|what is the name of the school id|which school is id|school with id)\b/i.test(message)
+    ) {
+        const nums = [...message.matchAll(/\b\d+\b/g)].map((m) => Number(m[0]));
+        if (nums.some((n) => n !== schoolId)) return true;
+    }
+
+    // Block rankings/comparisons/listing other schools
+    if (/\b(top|bottom|rank|ranking|best|worst|compare|comparison|list|some schools|which schools)\b/i.test(message)
+        && /\bschool|schools\b/i.test(message)) {
+        return true;
+    }
+
+    // If we know the user's school name, block mentions of other school names
+    if (schoolName) {
+        const own = schoolName.toLowerCase().trim();
+        const schoolNamePattern = /\b[a-z]{2,}[_ -]?school[_ -]?\d+\b/i; // catches SC_School_02 style names
+        const found = message.match(schoolNamePattern);
+        if (found && found[0].toLowerCase() !== own) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // Express route handler: Processes chat messages and returns AI generated responses
 router.post("/chat", async (req, res) => {
     const { message, history } = req.body;
@@ -792,12 +858,9 @@ router.post("/chat", async (req, res) => {
     }
 
     const rawSchoolId = user?.[SCHOOL_NAMESPACE];
-
-    // Treat custom-claim schoolId === "Admin" as admin
     const isAdmin =
         (typeof rawSchoolId === "string" && rawSchoolId.toLowerCase() === "admin") || !!(req as any).user?.isAdmin;
 
-    // Only parse numeric schoolId for non-admins
     const schoolId = !isAdmin
         ? typeof rawSchoolId === "number"
             ? rawSchoolId
@@ -806,21 +869,29 @@ router.post("/chat", async (req, res) => {
                 : NaN
         : NaN;
 
-    console.log("[chat] message:", message);
-    console.log("[chat] history length:", history?.length ?? 0);
-    console.log("[chat] isAdmin:", isAdmin);
-    console.log("[chat auth raw schoolId]", rawSchoolId);
-    console.log("[chat auth parsed]", { isAdmin, schoolId });
-
     if (!message || typeof message !== "string") {
-        res.status(400).json({ error: "Missing or invalid message" });
-        return;
+        return res.status(400).json({ error: "Missing or invalid message" });
     }
 
-    // Enforce that non-admin users must have a valid schoolId in token claims
     if (!isAdmin && !Number.isFinite(schoolId)) {
-        res.status(403).json({ error: "Missing schoolId for school user" });
-        return;
+        return res.status(403).json({ error: "Missing schoolId for school user" });
+    }
+
+    let ownSchoolName: string | undefined;
+    if (!isAdmin) {
+        const ownSchool = await db.collection("School").findOne(
+            { ID: schoolId },
+            { projection: { _id: 0, NAME_TX: 1 } }
+        );
+        ownSchoolName = ownSchool?.NAME_TX;
+    }
+
+    if (!isAdmin && isForbiddenSchoolLookupForSchoolUser(message, schoolId, ownSchoolName)) {
+        return res.status(200).json({
+            reply: "I can only provide information about your own school. I can help with your school’s data or with overall benchmark averages that do not identify other schools.",
+            queryPlan: null,
+            validation: null,
+        });
     }
 
     // Block ranking queries for school users (they would leak other schools)

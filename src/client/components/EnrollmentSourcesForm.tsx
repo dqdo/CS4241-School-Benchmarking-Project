@@ -23,10 +23,11 @@ const INITIAL_FORM_STATE = {
     ...Object.fromEntries(ALL_FIELDS.map(field => [field.name, ""]))
 };
 
-export default function EnrollmentSourcesForm() {
-    const { schoolYears, loading, submitStatus, fetchAutofillData, submitForm, resetSubmitStatus } = useSchoolDataForm({
+export default function EnrollmentSourcesForm({ schoolId }: { schoolId: string }) {
+    const { schoolYears, loading, submitStatus, fetchAutofillData, submitForm, saveDraft, loadDraft, resetSubmitStatus } = useSchoolDataForm({
         endpoint: '/api/submit-enrollment-sources',
-        dataEndpoint: '/api/enrollment-sources-data'
+        dataEndpoint: '/api/enrollment-sources-data',
+        schoolId
     });
 
     const [formData, setFormData] = useState(INITIAL_FORM_STATE);
@@ -44,7 +45,7 @@ export default function EnrollmentSourcesForm() {
                 }
             });
         }
-    }, [formData.SCHOOL_YR_ID]);
+    }, [formData.SCHOOL_YR_ID, schoolId]);
 
     useEffect(() => {
         if (submitStatus === 'success') {
@@ -67,9 +68,33 @@ export default function EnrollmentSourcesForm() {
         return false;
     };
 
+    const handleSaveDraft = async () => {
+        if (!formData.SCHOOL_YR_ID) {
+            alert("Please select a Year to save a draft.");
+            return;
+        }
+        const result = await saveDraft("EnrollmentSources", formData);
+        if (result.success) alert("Draft saved successfully!");
+    };
+
+    const handleLoadDraft = async () => {
+        if (!formData.SCHOOL_YR_ID) {
+            alert("Please select a Year to load its draft.");
+            return;
+        }
+        const data = await loadDraft("EnrollmentSources", formData.SCHOOL_YR_ID);
+        if (data) {
+            setFormData(prev => ({ ...prev, ...data }));
+            alert("Draft loaded!");
+        } else {
+            alert("No draft found for this year.");
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         if (hasValidationErrors()) return;
+
         const result = await submitForm(formData);
         if (result.success) setFormData(INITIAL_FORM_STATE);
     };
@@ -107,7 +132,7 @@ export default function EnrollmentSourcesForm() {
             <DropdownSection
                 schoolYears={schoolYears}
                 grades={[]}
-                formData={formData}
+                formData={formData as any}
                 onChange={handleChange}
                 showGrade={false}
             />
@@ -147,9 +172,27 @@ export default function EnrollmentSourcesForm() {
                 </div>
             ))}
 
-            <div className="flex justify-end pt-6">
-                <button type="submit" className="bg-[#0693E3] text-white px-8 py-3 rounded font-semibold hover:bg-blue-600 transition-colors shadow-sm">
-                    Save Enrollment Sources
+            <div className="flex justify-end pt-6 gap-3">
+                <button
+                    type="button"
+                    onClick={handleLoadDraft}
+                    className="bg-gray-200 text-gray-700 px-6 py-3 rounded font-semibold hover:bg-gray-300 transition-colors shadow-sm"
+                >
+                    Load Draft
+                </button>
+                <button
+                    type="button"
+                    onClick={handleSaveDraft}
+                    className="bg-white border-2 border-[#0693E3] text-[#0693E3] px-6 py-3 rounded font-semibold hover:bg-blue-50 transition-colors shadow-sm"
+                >
+                    Save Draft
+                </button>
+                <button
+                    type="submit"
+                    disabled={loading}
+                    className="bg-[#0693E3] text-white px-8 py-3 rounded font-semibold hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                >
+                    {loading ? 'Saving...' : 'Save Enrollment Sources'}
                 </button>
             </div>
         </form>

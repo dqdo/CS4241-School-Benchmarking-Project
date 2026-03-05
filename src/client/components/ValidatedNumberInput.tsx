@@ -22,7 +22,7 @@ export default function ValidatedNumberInput({ name, value, onChange, required =
 
         if (!hasInvalidChars) {
             setError("Please enter only valid positive numbers");
-            return;
+            return
         }
 
         setError("");
