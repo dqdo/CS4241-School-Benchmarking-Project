@@ -8,11 +8,14 @@ export default function Button({ buttonText, className, ...props }: ButtonProps)
     return (
         <button
             className={`
-                rounded-sm w-64 h-16 text-lg border-2 text-white transition-colors duration-200
+                group relative inline-flex items-center justify-center gap-2
+                px-6 py-2.5 text-sm font-semibold tracking-wide
+                rounded-lg border transition-all duration-200
                 ${props.disabled
-                ? "bg-gray-400 border-gray-500 cursor-not-allowed"
-                : "bg-[#0A3E6C] hover:bg-[#0066CC] border-[#1A3A6C]"}
-                ${className}
+                ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
+                : "bg-[#0A3E6C] border-[#0A3E6C] text-white hover:bg-[#0d4f8a] hover:border-[#0d4f8a] hover:shadow-md active:scale-[0.98]"
+            }
+                ${className ?? ""}
             `}
             {...props}
         >

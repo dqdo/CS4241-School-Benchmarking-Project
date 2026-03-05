@@ -9,15 +9,17 @@ export type AdmissionGraphsProps = {
     config: ChartConfig;
     updateConfig: (c: ChartConfig) => void;
     removeChart: () => void;
+    clearChart: () => void;
     label: string;
     availableTabs: string[];
     schools: School[];
     years: Year[];
     grades: Grade[];
     showRemove: boolean;
+    chartNumber?: number;
 };
 
-export default function PersonnelGraphs({ config, updateConfig, removeChart, label, availableTabs, schools, years, grades, showRemove }: AdmissionGraphsProps) {
+export default function PersonnelGraphs({ config, updateConfig, removeChart, clearChart, label, availableTabs, schools, years, grades, showRemove, chartNumber }: AdmissionGraphsProps) {
     // States to hold the fetched data to pass down to Graph component
     const [graphData, setGraphData] = useState<GraphData[]>([]);
     const [secondaryGraphData, setSecondaryGraphData] = useState<GraphData[]>([]);
@@ -68,16 +70,20 @@ export default function PersonnelGraphs({ config, updateConfig, removeChart, lab
     }, [config.schoolSelection, config.yearSelection, config.gradeSelection, config.secondaryLabel, label]);
 
     const handleChartTypeChange = (newType: string) => {
-        const updatedConfig = { ...config, chartType: newType };
-        if (newType !== "line") updatedConfig.gradeSelection = "";
-        if (newType === "line") updatedConfig.yearSelection = "";
-        updateConfig(updatedConfig);
+        updateConfig({ ...config, chartType: newType });
     };
 
     const isDualAxisCompatible = config.chartType === "line" || config.chartType === "bar";
 
     return (
         <div className="border-2 border-[#0A3E6C] p-4 flex flex-col h-full rounded-b-lg rounded-tr-lg bg-white shadow-sm">
+            {showRemove && chartNumber !== undefined && (
+                <div className="flex items-center mb-2">
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#0A3E6C] text-white text-xs font-bold">
+                        {chartNumber}
+                    </span>
+                </div>
+            )}
             <div className="flex flex-wrap gap-2 mb-4 p-2 bg-gray-50 rounded justify-center items-center">
                 <select
                     className="border p-1 text-sm rounded outline-none font-semibold text-[#0A3E6C]"
@@ -112,17 +118,31 @@ export default function PersonnelGraphs({ config, updateConfig, removeChart, lab
                         </select>
 
                         {config.secondaryLabel && (
-                            <select
-                                className="border p-1 text-sm rounded outline-none bg-orange-50 text-orange-800 border-orange-200"
-                                value={config.secondaryChartType}
-                                onChange={(e) => updateConfig({ ...config, secondaryChartType: e.target.value })}
-                            >
-                                <option value="line">Line Layer</option>
-                                <option value="bar">Bar Layer</option>
-                            </select>
+                            <div className="flex rounded-lg border border-orange-200 overflow-hidden">
+                                {["line", "bar"].map(type => (
+                                    <button
+                                        key={type}
+                                        onClick={() => updateConfig({ ...config, secondaryChartType: type })}
+                                        className={`px-2.5 py-1 text-xs font-semibold transition-colors border-r border-orange-200 last:border-r-0 ${
+                                            config.secondaryChartType === type
+                                                ? "bg-orange-500 text-white"
+                                                : "bg-orange-50 text-orange-700 hover:bg-orange-100"
+                                        }`}
+                                    >
+                                        {type.charAt(0).toUpperCase() + type.slice(1)} Layer
+                                    </button>
+                                ))}
+                            </div>
                         )}
                     </>
                 )}
+
+                <button
+                    onClick={clearChart}
+                    className="text-xs font-semibold text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50"
+                >
+                    Clear
+                </button>
 
                 {showRemove && (
                     <button onClick={removeChart} className="ml-auto text-red-600 text-sm font-bold hover:text-red-800 px-2">

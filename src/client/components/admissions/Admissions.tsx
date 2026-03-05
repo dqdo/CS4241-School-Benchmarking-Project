@@ -45,17 +45,24 @@ export default function Admissions() {
 
     const handleGlobalChartTypeChange = (newType: string) => {
         setGlobalChartType(newType);
-        setCharts(charts.map(chart => {
-            const updated = { ...chart, chartType: newType };
-            if (newType !== "line") updated.gradeSelection = "";
-            if (newType === "line") updated.yearSelection = "";
-            return updated;
-        }));
+        // Only update chartType — do NOT wipe school/year/grade so users keep their selections
+        setCharts(charts.map(chart => ({ ...chart, chartType: newType })));
     };
 
     const handleGlobalSecondaryChartTypeChange = (newType: string) => {
         setGlobalSecondaryChartType(newType);
         setCharts(charts.map(chart => ({ ...chart, secondaryChartType: newType })));
+    };
+
+    const clearChart = (id: number) => {
+        setCharts(charts.map(c => c.id === id
+            ? { ...c, schoolSelection: "", yearSelection: "", gradeSelection: "", secondaryLabel: "" }
+            : c
+        ));
+    };
+
+    const clearAllCharts = () => {
+        setCharts(charts.map(c => ({ ...c, schoolSelection: "", yearSelection: "", gradeSelection: "", secondaryLabel: "" })));
     };
 
     const addChart = () => {
@@ -82,7 +89,6 @@ export default function Admissions() {
 
     const getGridLayout = () => {
         if (charts.length === 1) return "grid grid-cols-1 w-full max-w-5xl mx-auto gap-6";
-        if (charts.length === 2) return "grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 w-full gap-4";
         return "grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 w-full gap-4";
     };
 
@@ -100,55 +106,85 @@ export default function Admissions() {
             </div>
 
             <div className="flex-1 mt-2">
-                <div className="flex justify-between items-center bg-gray-100 p-4 rounded mb-6 shadow-sm">
-                    <div className="flex items-center space-x-4">
-                        <label className="font-bold text-gray-700">Apply to All (Chart Type):</label>
-                        <select
-                            className="border p-2 rounded outline-none"
-                            value={globalChartType}
-                            onChange={(e) => handleGlobalChartTypeChange(e.target.value)}
-                        >
-                            <option value="bar">Bar</option>
-                            <option value="line">Line</option>
-                            <option value="pie">Pie</option>
-                            <option value="doughnut">Doughnut</option>
-                        </select>
+                <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-6 overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
+                        <span className="text-xs font-semibold uppercase tracking-widest text-gray-400">Global Controls: Applies To All Charts</span>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={clearAllCharts}
+                                className="text-xs font-semibold text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50"
+                            >
+                                Clear All
+                            </button>
+                            <div className="flex items-center gap-1.5 text-sm text-gray-500 font-medium">
+                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#0A3E6C] text-white text-xs font-bold">
+                                    {charts.length}
+                                </span>
+                                <span>/ 4 charts</span>
+                            </div>
+                            <Button onClick={addChart} buttonText="Add Chart" disabled={charts.length >= 4} />
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-6 px-4 py-3">
+                        {/* Chart Type */}
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-gray-600 whitespace-nowrap">Chart Type:</span>
+                            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                                {["bar", "line", "pie", "doughnut"].map(type => (
+                                    <button
+                                        key={type}
+                                        onClick={() => handleGlobalChartTypeChange(type)}
+                                        className={`px-3 py-1.5 text-sm font-medium transition-colors border-r border-gray-200 last:border-r-0 ${
+                                            globalChartType === type
+                                                ? "bg-[#0A3E6C] text-white"
+                                                : "bg-white text-gray-600 hover:bg-gray-50"
+                                        }`}
+                                    >
+                                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
 
+                        {/* Dual Axis Layer — only for bar/line */}
                         {(globalChartType === "bar" || globalChartType === "line") && (
-                            <>
-                                <label className="font-bold text-gray-700 ml-4">Apply to All (Dual-Axis):</label>
-                                <select
-                                    className="border p-2 rounded outline-none"
-                                    value={globalSecondaryChartType}
-                                    onChange={(e) => handleGlobalSecondaryChartTypeChange(e.target.value)}
-                                >
-                                    <option value="line">Line</option>
-                                    <option value="bar">Bar</option>
-                                </select>
-                            </>
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-gray-600 whitespace-nowrap">Dual-Axis Layer:</span>
+                                <div className="flex rounded-lg border border-orange-200 overflow-hidden">
+                                    {["line", "bar"].map(type => (
+                                        <button
+                                            key={type}
+                                            onClick={() => handleGlobalSecondaryChartTypeChange(type)}
+                                            className={`px-3 py-1.5 text-sm font-medium transition-colors border-r border-orange-200 last:border-r-0 ${
+                                                globalSecondaryChartType === type
+                                                    ? "bg-orange-500 text-white"
+                                                    : "bg-orange-50 text-orange-700 hover:bg-orange-100"
+                                            }`}
+                                        >
+                                            {type.charAt(0).toUpperCase() + type.slice(1)}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         )}
                     </div>
-
-                    <Button
-                        onClick={addChart}
-                        buttonText={`Add Chart (${charts.length}/4)`}
-                        disabled={charts.length >= 4}
-                    />
                 </div>
 
                 <div className={getGridLayout()}>
-                    {charts.map((chart) => (
+                    {charts.map((chart, index) => (
                         <AdmissionGraphs
                             key={chart.id}
                             config={chart}
                             updateConfig={updateChart}
                             removeChart={() => removeChart(chart.id)}
+                            clearChart={() => clearChart(chart.id)}
                             label={activeTab}
                             availableTabs={tabs}
                             schools={schools}
                             years={years}
                             grades={grades}
                             showRemove={charts.length > 1}
+                            chartNumber={index + 1}
                         />
                     ))}
                 </div>

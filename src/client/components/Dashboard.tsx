@@ -28,7 +28,11 @@ function KPISection({ label, color, children }: SectionProps) {
     );
 }
 
-export default function Dashboard() {
+type DashboardProps = {
+    navigateTo: (tabIndex: number) => void;
+};
+
+export default function Dashboard({ navigateTo }: DashboardProps) {
     const [schools, setSchools]       = useState<School[]>([]);
     const [years, setYears]           = useState<Year[]>([]);
     const [userSchool, setUserSchool] = useState<School>({ ID: -1, NAME_TX: "NONE" });
@@ -104,12 +108,13 @@ export default function Dashboard() {
                             <span className="text-xs text-gray-400 font-medium">All schools benchmark</span>
                         </div>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 overflow-visible">
                         <KPISection label="Enrollment" color="#0A3E6C">
                             <EnrollmentKPIs
                                 selectedSchool={schoolSelection}
                                 yearStartId={yearStart.ID}
                                 yearEndId={yearEnd.ID}
+                                navigateTo={navigateTo}
                             />
                         </KPISection>
 
@@ -118,6 +123,7 @@ export default function Dashboard() {
                                 selectedSchool={schoolSelection}
                                 yearStartId={yearStart.ID}
                                 yearEndId={yearEnd.ID}
+                                navigateTo={navigateTo}
                             />
                         </KPISection>
 
@@ -126,6 +132,7 @@ export default function Dashboard() {
                                 selectedSchool={schoolSelection}
                                 yearStartId={yearStart.ID}
                                 yearEndId={yearEnd.ID}
+                                navigateTo={navigateTo}
                             />
                         </KPISection>
 
@@ -134,6 +141,7 @@ export default function Dashboard() {
                                 selectedSchool={schoolSelection}
                                 yearStartId={yearStart.ID}
                                 yearEndId={yearEnd.ID}
+                                navigateTo={navigateTo}
                             />
                         </KPISection>
                     </div>

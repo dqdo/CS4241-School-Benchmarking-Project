@@ -5,9 +5,10 @@ type PersonnelKPIsProps = {
     selectedSchool: string;
     yearStartId: number;
     yearEndId: number;
+    navigateTo: (tabIndex: number) => void;
 };
 
-export default function PersonnelKPIs({ selectedSchool, yearStartId, yearEndId }: PersonnelKPIsProps) {
+export default function PersonnelKPIs({ selectedSchool, yearStartId, yearEndId, navigateTo }: PersonnelKPIsProps) {
     const [totalTeacherFTEs, setTotalTeacherFTEs] = useState<number | null>(null);
     const [totalFTEs, setTotalFTEs]               = useState<number | null>(null);
 
@@ -25,14 +26,21 @@ export default function PersonnelKPIs({ selectedSchool, yearStartId, yearEndId }
 
     const fmt = (v: number | null) => v === null ? "—" : v.toFixed(1);
 
+    // Tab index 4 = "Personnel"
+    const goToPersonnel = () => navigateTo(4);
+
     return (
         <>
             <KPITile label="Teacher FTEs"
                      value={fmt(totalTeacherFTEs)}
-                     accent="#1A6B3C" />
+                     accent="#1A6B3C"
+                     tooltip="Total full-time equivalent teaching staff at your school across the selected year range. Part-time teachers count as a fraction of 1.0."
+                     onClick={goToPersonnel} />
             <KPITile label="Total FTEs"
                      value={fmt(totalFTEs)}
-                     accent="#1A6B3C" />
+                     accent="#1A6B3C"
+                     tooltip="Total headcount of all employees across the selected year range, covering every staff category."
+                     onClick={goToPersonnel} />
         </>
     );
 }

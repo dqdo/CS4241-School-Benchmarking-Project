@@ -2,60 +2,67 @@
 
 import { useEffect, useState } from "react";
 import Graph, { GraphData } from "../../elements/Graph";
-import { ChartConfig, Grade, School, Year } from "./Admissions";
+import { EnrollChartConfig, School, TABS, Year } from "./EnrollAttrition";
 
-export type AdmissionGraphsProps = {
-    config: ChartConfig;
-    updateConfig: (c: ChartConfig) => void;
+export type EnrollAttritionGraphsProps = {
+    config: EnrollChartConfig;
+    updateConfig: (c: EnrollChartConfig) => void;
     removeChart: () => void;
     clearChart: () => void;
     label: string;
-    availableTabs: string[];
+    field: string;
+    collection: "EnrollAttrition" | "EnrollAttritionSOC";
     schools: School[];
     years: Year[];
-    grades: Grade[];
+    availableTabs: { label: string; field: string }[];
     showRemove: boolean;
     chartNumber?: number;
 };
 
-export default function AdmissionGraphs({ config, updateConfig, removeChart, clearChart, label, availableTabs, schools, years, grades, showRemove, chartNumber }: AdmissionGraphsProps) {
-    // States to hold the fetched data to pass down to Graph component
-    const [graphData, setGraphData] = useState<GraphData[]>([]);
+export default function EnrollAttritionGraphs({
+                                                  config,
+                                                  updateConfig,
+                                                  removeChart,
+                                                  clearChart,
+                                                  label,
+                                                  field,
+                                                  collection,
+                                                  schools,
+                                                  years,
+                                                  availableTabs,
+                                                  showRemove,
+                                                  chartNumber,
+                                              }: EnrollAttritionGraphsProps) {
+    const [graphData, setGraphData]               = useState<GraphData[]>([]);
     const [secondaryGraphData, setSecondaryGraphData] = useState<GraphData[]>([]);
 
-    async function fetchAdmissions(fieldLabel: string = label) {
-        if (!config.schoolSelection) return [];
-        if (!config.yearSelection && !config.gradeSelection) return [];
+    async function fetchData(fetchField: string): Promise<GraphData[]> {
+        if (!config.schoolSelection || !config.yearSelection) return [];
 
         const params = {
             school: config.schoolSelection,
             year: config.yearSelection,
-            grade: config.gradeSelection,
-            field: fieldLabel.toUpperCase()
+            field: fetchField,
+            collection,
         };
 
-        const queryString = new URLSearchParams(params as any).toString();
-        const response = await fetch(`/admissions?${queryString}`);
+        const queryString = new URLSearchParams(params).toString();
+        const response = await fetch(`/enrollment-attrition?${queryString}`);
         const data = await response.json();
 
-        if (config.gradeSelection) {
-            return data.map((row: any): GraphData => ({ x: row.YEAR, y: row.DATA }));
-        }
-
-        return data.map((row: any): GraphData => ({ x: row.DESCRIPTION, y: row.DATA }));
+        return data.map((row: any): GraphData => ({ x: row.DESCRIPTION, y: row.VALUE }));
     }
 
-    // React to changes and fetch the necessary data for both axes
     useEffect(() => {
         let isMounted = true;
 
         const loadData = async () => {
-            const primaryData = await fetchAdmissions(label);
-            if (isMounted) setGraphData(primaryData);
+            const primary = await fetchData(field);
+            if (isMounted) setGraphData(primary);
 
-            if (config.secondaryLabel) {
-                const secondaryData = await fetchAdmissions(config.secondaryLabel);
-                if (isMounted) setSecondaryGraphData(secondaryData);
+            if (config.secondaryField) {
+                const secondary = await fetchData(config.secondaryField);
+                if (isMounted) setSecondaryGraphData(secondary);
             } else {
                 if (isMounted) setSecondaryGraphData([]);
             }
@@ -63,12 +70,16 @@ export default function AdmissionGraphs({ config, updateConfig, removeChart, cle
 
         loadData();
 
-        return () => { isMounted = false };
-    }, [config.schoolSelection, config.yearSelection, config.gradeSelection, config.secondaryLabel, label]);
+        return () => { isMounted = false; };
+    }, [config.schoolSelection, config.yearSelection, field, config.secondaryField, collection]);
 
     const handleChartTypeChange = (newType: string) => {
-        // Only switch the chart type — preserve school/year/grade selections
         updateConfig({ ...config, chartType: newType });
+    };
+
+    const handleSecondaryLabelChange = (newLabel: string) => {
+        const newField = availableTabs.find(t => t.label === newLabel)?.field ?? "";
+        updateConfig({ ...config, secondaryLabel: newLabel, secondaryField: newField });
     };
 
     const isDualAxisCompatible = config.chartType === "line" || config.chartType === "bar";
@@ -83,10 +94,11 @@ export default function AdmissionGraphs({ config, updateConfig, removeChart, cle
                 </div>
             )}
             <div className="flex flex-wrap gap-2 mb-4 p-2 bg-gray-50 rounded justify-center items-center">
+                {/* Chart type */}
                 <select
                     className="border p-1 text-sm rounded outline-none font-semibold text-[#0A3E6C]"
                     value={config.chartType}
-                    onChange={(e) => handleChartTypeChange(e.target.value)}
+                    onChange={e => handleChartTypeChange(e.target.value)}
                 >
                     <option value="bar">Bar</option>
                     <option value="line">Line</option>
@@ -94,48 +106,45 @@ export default function AdmissionGraphs({ config, updateConfig, removeChart, cle
                     <option value="doughnut">Doughnut</option>
                 </select>
 
+                {/* School */}
                 <select
                     className="border p-1 text-sm rounded outline-none"
                     value={config.schoolSelection}
                     onChange={e => updateConfig({ ...config, schoolSelection: e.target.value })}
                 >
                     <option value="">Select School</option>
-                    {schools.map(s => <option key={s.ID} value={s.ID}>{s.NAME_TX}</option>)}
+                    {schools.map(s => (
+                        <option key={s.ID} value={s.ID}>{s.NAME_TX}</option>
+                    ))}
                 </select>
 
-                {config.chartType !== "line" && (
-                    <select
-                        className="border p-1 text-sm rounded outline-none"
-                        value={config.yearSelection}
-                        onChange={e => updateConfig({ ...config, yearSelection: e.target.value })}
-                    >
-                        <option value="">Select Year</option>
-                        {years.map(y => <option key={y.ID} value={y.ID}>{y.SCHOOL_YEAR}</option>)}
-                    </select>
-                )}
+                {/* Year */}
+                <select
+                    className="border p-1 text-sm rounded outline-none"
+                    value={config.yearSelection}
+                    onChange={e => updateConfig({ ...config, yearSelection: e.target.value })}
+                >
+                    <option value="">Select Year</option>
+                    {years.map(y => (
+                        <option key={y.ID} value={y.ID}>{y.SCHOOL_YEAR}</option>
+                    ))}
+                </select>
 
-                {config.chartType === "line" && (
-                    <select
-                        className="border p-1 text-sm rounded outline-none"
-                        value={config.gradeSelection}
-                        onChange={e => updateConfig({ ...config, gradeSelection: e.target.value })}
-                    >
-                        <option value="">Select Grade</option>
-                        {grades.map(g => <option key={g.ID} value={g.ID}>{g.DESCRIPTION_TX}</option>)}
-                    </select>
-                )}
-
+                {/* Dual axis controls */}
                 {isDualAxisCompatible && (
                     <>
                         <select
                             className="border p-1 text-sm rounded outline-none bg-orange-50 text-orange-800 border-orange-200"
                             value={config.secondaryLabel}
-                            onChange={e => updateConfig({ ...config, secondaryLabel: e.target.value })}
+                            onChange={e => handleSecondaryLabelChange(e.target.value)}
                         >
                             <option value="">+ Dual Axis (None)</option>
-                            {availableTabs.filter(tab => tab !== label).map(tab => (
-                                <option key={tab} value={tab}>{tab}</option>
-                            ))}
+                            {availableTabs
+                                .filter(t => t.label !== label)
+                                .map(t => (
+                                    <option key={t.label} value={t.label}>{t.label}</option>
+                                ))
+                            }
                         </select>
 
                         {config.secondaryLabel && (
@@ -166,7 +175,10 @@ export default function AdmissionGraphs({ config, updateConfig, removeChart, cle
                 </button>
 
                 {showRemove && (
-                    <button onClick={removeChart} className="ml-auto text-red-600 text-sm font-bold hover:text-red-800 px-2">
+                    <button
+                        onClick={removeChart}
+                        className="ml-auto text-red-600 text-sm font-bold hover:text-red-800 px-2"
+                    >
                         Remove
                     </button>
                 )}
@@ -185,5 +197,5 @@ export default function AdmissionGraphs({ config, updateConfig, removeChart, cle
                 </div>
             </div>
         </div>
-    )
+    );
 }
