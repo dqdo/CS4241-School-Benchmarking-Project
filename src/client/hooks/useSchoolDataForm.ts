@@ -3,9 +3,10 @@ import { useState, useEffect } from 'react';
 interface UseSchoolDataFormParams {
     endpoint: string;
     dataEndpoint: string;
+    schoolId: string | null;
 }
 
-export function useSchoolDataForm({ endpoint, dataEndpoint }: UseSchoolDataFormParams) {
+export function useSchoolDataForm({ endpoint, dataEndpoint, schoolId }: UseSchoolDataFormParams) {
     const [schoolYears, setSchoolYears] = useState<any[]>([]);
     const [grades, setGrades] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
@@ -49,12 +50,10 @@ export function useSchoolDataForm({ endpoint, dataEndpoint }: UseSchoolDataFormP
 
     //Fetch autofill data
     const fetchAutofillData = (yearId: string, gradeId?: string) => {
-        if (!yearId) return Promise.resolve(null);
+        if (!yearId || !schoolId) return Promise.resolve(null);
 
-        //If gradeId is provided, append it to the query, otherwise just send yearId
-        const url = gradeId
-            ? `${dataEndpoint}?yearId=${yearId}&gradeId=${gradeId}`
-            : `${dataEndpoint}?yearId=${yearId}`;
+        let url = `${dataEndpoint}?yearId=${yearId}&schoolId=${schoolId}`;
+        if (gradeId) url += `&gradeId=${gradeId}`;
 
         return fetch(url)
             .then(res => res.json())
@@ -66,34 +65,54 @@ export function useSchoolDataForm({ endpoint, dataEndpoint }: UseSchoolDataFormP
 
     //Submit form data
     const submitForm = async (formData: any) => {
+        if (!schoolId) return { success: false, error: "No school selected" };
+
         setLoading(true);
         setSubmitStatus('idle');
 
         try {
+            const payload = { ...formData, SCHOOL_ID: schoolId };
             const response = await fetch(endpoint, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify(formData)
+                body: JSON.stringify(payload)
             });
 
             if (response.ok) {
-                console.log("Successfully submitted data");
                 setSubmitStatus('success');
                 return { success: true };
             } else {
-                console.error("Backend returned an error: ", response.status);
                 setSubmitStatus('error');
                 return { success: false, error: `Error: ${response.status}` };
             }
         } catch (error) {
-            console.error("Error connecting to backend: ", error);
             setSubmitStatus('error');
             return { success: false, error: "Connection error" };
         } finally {
             setLoading(false);
         }
+    };
+
+    // --- Draft Functions ---
+    const saveDraft = async (formType: string, formData: any) => {
+        if (!schoolId) return { success: false };
+        const payload = { formType, draftData: { ...formData, SCHOOL_ID: schoolId } };
+        const res = await fetch("/api/save-draft", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        return { success: res.ok };
+    };
+
+    const loadDraft = async (formType: string, yearId: string, gradeId?: string) => {
+        if (!schoolId || !yearId) return null;
+        let url = `/api/get-draft?formType=${formType}&SCHOOL_YR_ID=${yearId}&schoolId=${schoolId}`;
+        if (gradeId) url += `&GRADE_DEF_ID=${gradeId}`;
+        const res = await fetch(url);
+        return await res.json();
     };
 
     const resetSubmitStatus = () => {
@@ -108,6 +127,8 @@ export function useSchoolDataForm({ endpoint, dataEndpoint }: UseSchoolDataFormP
         fetchGrades,
         fetchAutofillData,
         submitForm,
+        saveDraft,
+        loadDraft,
         resetSubmitStatus
     };
 }
