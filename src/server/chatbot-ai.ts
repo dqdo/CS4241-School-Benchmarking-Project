@@ -4,6 +4,7 @@ import { Router } from "express";
 import { Db } from "mongodb";
 import fs from "fs";
 import * as dotenv from "dotenv";
+
 dotenv.config();
 const router = Router();
 
@@ -297,7 +298,9 @@ function parseJsonFromAI(rawText: string): any {
     try {
         return JSON.parse(stripped);
     } catch (parseError: any) {
-        throw new Error(`Failed to parse JSON. Error: ${parseError.message}. JSON text: ${stripped.substring(0, 200)}...`);
+        throw new Error(
+            `Failed to parse JSON. Error: ${parseError.message}. JSON text: ${stripped.substring(0, 200)}...`
+        );
     }
 }
 
@@ -586,7 +589,9 @@ async function answerWithData(
     // STEP 3: Handle hard query execution error after all retries
     if (queryError) {
         const errorMessage = `I tried ${MAX_RETRY_ATTEMPTS} different approaches to retrieve the data but encountered errors each time. ${
-            results.length === 0 ? "Could you rephrase your question or provide more specific details?" : "However, I was able to retrieve some partial results."
+            results.length === 0
+                ? "Could you rephrase your question or provide more specific details?"
+                : "However, I was able to retrieve some partial results."
         }`;
 
         if (results.length > 0) {
@@ -601,7 +606,11 @@ async function answerWithData(
                         })
                         .join("\n")}`
                     : "";
-            const dataContext = `Query results (${results.length} record${results.length === 1 ? "" : "s"}):\n${JSON.stringify(results, null, 2)}`;
+            const dataContext = `Query results (${results.length} record${results.length === 1 ? "" : "s"}):\n${JSON.stringify(
+                results,
+                null,
+                2
+            )}`;
             const interpreterMessage = `User question: ${question}${errorHistoryContext}\n\n${dataContext}\n\nNote: This data may be incomplete due to query issues.`;
             const reply = await callAI(interpreterSystemPrompt, interpreterMessage, signal);
             return { reply: `${errorMessage}\n\n${reply}`, queryPlan };
@@ -632,7 +641,11 @@ async function answerWithData(
     }
 
     // STEP 5: Generate initial answer from results
-    const dataContext = `Query results (${results.length} record${results.length === 1 ? "" : "s"}):\n${JSON.stringify(results, null, 2)}`;
+    const dataContext = `Query results (${results.length} record${results.length === 1 ? "" : "s"}):\n${JSON.stringify(
+        results,
+        null,
+        2
+    )}`;
     const historyContext =
         history.length > 0
             ? `\n\nConversation history:\n${history
@@ -651,13 +664,18 @@ async function answerWithData(
     assertNotAborted(signal);
 
     // STEP 6: Validate the answer.
-    const isDisplayOnlyRequest = /^\s*(list|show|display|give me|what are|can you (list|show)|tell me).{0,60}(all|those|the).{0,40}(ids?|names?|schools?|records?)\s*\??\s*$/i.test(
-        question
-    );
+    const isDisplayOnlyRequest =
+        /^\s*(list|show|display|give me|what are|can you (list|show)|tell me).{0,60}(all|those|the).{0,40}(ids?|names?|schools?|records?)\s*\??\s*$/i.test(
+            question
+        );
 
     if (isDisplayOnlyRequest) {
         console.log("[answerWithData] Display-only request detected — skipping validation to prevent hallucination");
-        return { reply, queryPlan, validation: { isValid: true, reasoning: "Validation skipped for list/display request" } };
+        return {
+            reply,
+            queryPlan,
+            validation: { isValid: true, reasoning: "Validation skipped for list/display request" },
+        };
     }
 
     if (validationAttempt < MAX_RETRY_ATTEMPTS) {
@@ -681,7 +699,9 @@ async function answerWithData(
         console.log(`[answerWithData] Final answer generated (valid=${validation.isValid})`);
         return { reply, queryPlan, validation };
     } else {
-        console.log(`[answerWithData] Max validation attempts (${MAX_RETRY_ATTEMPTS}) reached, accepting answer despite validation concerns`);
+        console.log(
+            `[answerWithData] Max validation attempts (${MAX_RETRY_ATTEMPTS}) reached, accepting answer despite validation concerns`
+        );
         const validation: ValidationResult = {
             isValid: false,
             reasoning: "Maximum validation attempts reached, answer accepted by default",
@@ -775,16 +795,15 @@ router.post("/chat", async (req, res) => {
 
     // Treat custom-claim schoolId === "Admin" as admin
     const isAdmin =
-        (typeof rawSchoolId === "string" && rawSchoolId.toLowerCase() === "admin") ||
-        !!(req as any).user?.isAdmin;
+        (typeof rawSchoolId === "string" && rawSchoolId.toLowerCase() === "admin") || !!(req as any).user?.isAdmin;
 
     // Only parse numeric schoolId for non-admins
     const schoolId = !isAdmin
-        ? (typeof rawSchoolId === "number"
+        ? typeof rawSchoolId === "number"
             ? rawSchoolId
             : typeof rawSchoolId === "string"
                 ? Number(rawSchoolId)
-                : NaN)
+                : NaN
         : NaN;
 
     console.log("[chat] message:", message);
@@ -806,7 +825,6 @@ router.post("/chat", async (req, res) => {
 
     // Block ranking queries for school users (they would leak other schools)
     const rankingReq = /\b(top|bottom|rank|ranking|best|worst)\b/i.test(message) && /\bschools?\b/i.test(message);
-
     if (!isAdmin && rankingReq) {
         res.status(200).json({
             reply:
