@@ -759,7 +759,7 @@ function sanitizeGlobalResults(results: any[]): any[] {
     });
 }
 
-// Express route handler: Processes chat messages and returns AI-generated responses
+// Express route handler: Processes chat messages and returns AI generated responses
 router.post("/chat", async (req, res) => {
     const { message, history } = req.body;
 
@@ -771,13 +771,21 @@ router.post("/chat", async (req, res) => {
         return res.status(500).json({ error: "Database not connected" });
     }
 
-    // Admin: derived from server-side context if you have it set; otherwise it will be false.
-    // Do NOT trust req.body.isAdmin.
-    const isAdmin = !!(req as any).user?.isAdmin;
-
     const rawSchoolId = user?.[SCHOOL_NAMESPACE];
-    const schoolId =
-        typeof rawSchoolId === "number" ? rawSchoolId : typeof rawSchoolId === "string" ? Number(rawSchoolId) : NaN;
+
+    // Treat custom-claim schoolId === "Admin" as admin
+    const isAdmin =
+        (typeof rawSchoolId === "string" && rawSchoolId.toLowerCase() === "admin") ||
+        !!(req as any).user?.isAdmin;
+
+    // Only parse numeric schoolId for non-admins
+    const schoolId = !isAdmin
+        ? (typeof rawSchoolId === "number"
+            ? rawSchoolId
+            : typeof rawSchoolId === "string"
+                ? Number(rawSchoolId)
+                : NaN)
+        : NaN;
 
     console.log("[chat] message:", message);
     console.log("[chat] history length:", history?.length ?? 0);
@@ -802,7 +810,7 @@ router.post("/chat", async (req, res) => {
     if (!isAdmin && rankingReq) {
         res.status(200).json({
             reply:
-                "I can’t rank or list other schools for school users. I can tell you your school’s yield rate, or the average yield rate across all schools—tell me which you want.",
+                "I can’t rank or list other schools for school users. I can tell you information about your school or an average among all schools if you want.",
             queryPlan: null,
             validation: null,
         });
