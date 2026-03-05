@@ -36,6 +36,7 @@ export default function EmployeeForm({ schoolId }: { schoolId: string }) {
 
     const [formData, setFormData] = useState(INITIAL_FORM_STATE);
 
+    //Fetch autofill data when year is selected
     useEffect(() => {
         if (formData.SCHOOL_YR_ID) {
             fetchAutofillData(formData.SCHOOL_YR_ID).then(data => {

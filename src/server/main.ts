@@ -1295,6 +1295,94 @@ app.get("/api/get-draft", async (req, res) => {
     }
 });
 
+app.post("/api/submit-enrollment-sources", async (req, res) => {
+  if(!client) { return res.status(500).json({ message: "Failed to connect to DB" }); }
+  try {
+    const benchmarkDb = client.db("Test-School-Benchmark");
+    const userEmail = req.oidc.user?.email;
+
+    if (!userEmail) return res.status(401).json({message: "Unauthorized: No user email found"});
+
+    const userMapping = await benchmarkDb.collection("Users").findOne({email: userEmail});
+    if (!userMapping || !userMapping.SCHOOL_ID) return res.status(403).json({message: "Forbidden: User is not linked to a school"});
+
+    if (!req.body.SCHOOL_YR_ID) return res.status(400).json({message: "School Year is required."});
+
+    const schoolID = userMapping.SCHOOL_ID;
+    const schoolYearID = parseInt(req.body.SCHOOL_YR_ID, 10);
+
+    //Default values that can be part of entries in the db
+    const types = ['INQUIRIES', 'FACULTYCHILD'];
+    const genders = ['M', 'F', 'U'];
+    const operations = [];
+
+    //Go through all combos of gender and enrollment type, update the NR_ENROLLED
+    for (const type of types) {
+      for (const gender of genders) {
+        const fieldName = `${type}_${gender}`;
+        if (req.body[fieldName] !== undefined && req.body[fieldName] !== "") {
+          const nrEnrolled = parseInt(req.body[fieldName], 10);
+          if (!isNaN(nrEnrolled)) {
+            operations.push({
+              updateOne: {
+                filter: { SCHOOL_ID: schoolID, SCHOOL_YR_ID: schoolYearID, ENROLLMENT_TYPE_CD: type, GENDER: gender },
+                update: {
+                  $set: { NR_ENROLLED: nrEnrolled },
+                  //Generate a unique ID if it's a brand new insert
+                  $setOnInsert: { ID: Date.now() + Math.floor(Math.random() * 1000), LOCK_ID: 1, UPDATE_USER_TX: null, UPDATE_DT: null }
+                },
+                upsert: true
+              }
+            });
+          }
+        }
+      }
+    }
+    //If we added anything, then go to bulkWrite to the db and add all the changes
+    if (operations.length > 0) {
+      await benchmarkDb.collection("AdmissionActivityEnrollment").bulkWrite(operations);
+    }
+
+    res.status(200).json({message: "Successfully saved Enrollment Sources data"});
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.get("/api/enrollment-sources-data", async (req, res) => {
+  if(!client) return res.status(500).json({ message: "No DB connection" });
+  try {
+    const benchmarkDb = client.db("Test-School-Benchmark");
+    const userEmail = req.oidc?.user?.email;
+    const userMapping = await benchmarkDb.collection("Users").findOne({ email: userEmail });
+
+    if (!userMapping || !userMapping.SCHOOL_ID) return res.status(403).json({ message: "No school linked" });
+
+    const yearId = parseInt(req.query.yearId as string, 10);
+    if (!yearId) return res.status(400).json({ message: "Missing Year ID" });
+
+    //Fetch all rows for this school and year
+    const records = await benchmarkDb.collection("AdmissionActivityEnrollment").find({
+      SCHOOL_ID: userMapping.SCHOOL_ID,
+      SCHOOL_YR_ID: yearId
+    }).toArray();
+
+    //Flatten back to INQUIRIES_M format for the frontend autofill
+    const flatData: any = {};
+    records.forEach(record => {
+      if (record.ENROLLMENT_TYPE_CD && record.GENDER) {
+        flatData[`${record.ENROLLMENT_TYPE_CD}_${record.GENDER}`] = record.NR_ENROLLED;
+      }
+    });
+
+    res.status(200).json(flatData);
+  } catch (error) {
+    console.error("Autofill error:", error);
+    res.status(500).json({ message: "Error fetching existing data" });
+  }
+});
+
 ViteExpress.listen(app, 3000, async () => {
   await client.connect();
   console.log('Connected to MongoDB');

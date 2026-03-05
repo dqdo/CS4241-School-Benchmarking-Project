@@ -41,10 +41,12 @@ export default function AdmissionsForm({ schoolId }: { schoolId: string }) {
 
     const [formData, setFormData] = useState(INITIAL_FORM_STATE);
 
+    //Fetch grades when year changes
     useEffect(() => {
         fetchGrades(formData.SCHOOL_YR_ID);
     }, [formData.SCHOOL_YR_ID]);
 
+    //Fetch autofill data when both year and grade are selected
     useEffect(() => {
         if (formData.SCHOOL_YR_ID && formData.GRADE_DEF_ID) {
             fetchAutofillData(formData.SCHOOL_YR_ID, formData.GRADE_DEF_ID).then(data => {
@@ -60,6 +62,7 @@ export default function AdmissionsForm({ schoolId }: { schoolId: string }) {
         }
     }, [formData.SCHOOL_YR_ID, formData.GRADE_DEF_ID, schoolId]);
 
+    //Clear success message after 3 seconds
     useEffect(() => {
         if (submitStatus === 'success') {
             const timer = setTimeout(() => resetSubmitStatus(), 3000);
@@ -67,6 +70,7 @@ export default function AdmissionsForm({ schoolId }: { schoolId: string }) {
         }
     }, [submitStatus, resetSubmitStatus]);
 
+    //Handle form data changing
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({
@@ -76,6 +80,7 @@ export default function AdmissionsForm({ schoolId }: { schoolId: string }) {
         }));
     };
 
+    //Validation function to check if form has errors
     const hasValidationErrors = () => {
         for (const field of ALL_FIELDS) {
             const value = formData[field.name as keyof typeof formData];
