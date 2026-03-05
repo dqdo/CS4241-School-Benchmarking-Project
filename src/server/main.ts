@@ -69,7 +69,7 @@ function getRequestSchoolId(req: any) {
 
     //If Admin, check if they sent a specific school to override the request
     if (isAdmin) {
-        const overrideId = req.query.schoolId || req.body.SCHOOL_ID;
+        const overrideId = req.query.schoolId || req.body.SCHOOL_ID || req.body.draftData?.SCHOOL_ID;
         if (overrideId) return parseInt(overrideId, 10);
         return null;
     }

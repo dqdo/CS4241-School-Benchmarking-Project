@@ -98,7 +98,7 @@ export function useSchoolDataForm({ endpoint, dataEndpoint, schoolId }: UseSchoo
     // --- Draft Functions ---
     const saveDraft = async (formType: string, formData: any) => {
         if (!schoolId) return { success: false };
-        const payload = { formType, draftData: { ...formData, SCHOOL_ID: schoolId } };
+        const payload = { formType, draftData: formData, SCHOOL_ID: schoolId };
         const res = await fetch("/api/save-draft", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
