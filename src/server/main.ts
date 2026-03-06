@@ -421,6 +421,69 @@ app.get("/admissions", async (req, res) => {
   return res.status(200).json(data);
 })
 
+app.get("/admissionsStats", async (req, res) => {
+  if (!db || !req.oidc.user) {
+    return res.status(500).send("Database connection error");
+  }
+
+  const schoolId: string = req.oidc.user[SCHOOL_NAMESPACE] || "";
+  const school = schoolId == "Admin" ? Number(req.query.school) : Number(schoolId);
+
+  const year = req.query.year ? Number(req.query.year) : undefined;
+  const field = req.query.field ? req.query.field : undefined;
+  const grade = req.query.grade ? Number(req.query.grade) : undefined;
+
+  // Look up the school's region and find all peers
+  const schoolDoc = await db.collection("School").findOne({ ID: school });
+  if (!schoolDoc) return res.status(404).json({ error: "School not found" });
+
+  const regionCd = schoolDoc.REGION_CD;
+  const peerSchools = await db.collection("School").find({ REGION_CD: regionCd }).toArray();
+  const peerSchoolIds = peerSchools.map((s) => s.ID);
+
+  let dataField: string;
+  switch (field) {
+    case "ACCEPTANCES":           dataField = "ACCEPTANCES_TOTAL";          break;
+    case "ENROLLMENTS":           dataField = "NEW_ENROLLMENTS_TOTAL";       break;
+    case "ENROLL CAPACITY":       dataField = "CAPACITY_ENROLL";             break;
+    case "COMPLETED APPLICATION": dataField = "COMPLETED_APPLICATION_TOTAL"; break;
+    default:
+      return res.status(400).json({ error: "Invalid or missing field" });
+  }
+
+  const filter = grade
+      ? { SCHOOL_ID: { $in: peerSchoolIds }, GRADE_DEF_ID: grade }
+      : { SCHOOL_ID: { $in: peerSchoolIds }, SCHOOL_YR_ID: year };
+
+  const data = await db.collection("AdmissionActivity").aggregate([
+    { $match: filter },
+    {
+      $group: {
+        _id: "$SCHOOL_ID",
+        total: { $sum: `$${dataField}` }
+      }
+    }
+  ]).toArray();
+
+  if (data.length === 0) {
+    return res.status(200).json({ average: 0, median: 0, range: { min: 0, max: 0 } });
+  }
+
+  const values = data.map((d) => d.total as number).sort((a, b) => a - b);
+  const count = values.length;
+
+  const average = parseFloat((values.reduce((sum, v) => sum + v, 0) / count).toFixed(2));
+
+  const median =
+      count % 2 === 0
+          ? parseFloat(((values[count / 2 - 1] + values[count / 2]) / 2).toFixed(2))
+          : values[Math.floor(count / 2)];
+
+  const range = { min: values[0], max: values[count - 1] };
+
+  return res.status(200).json({ average, median, range });
+});
+
 app.get("/personnel", async (req, res) => {
   if(!db || !req.oidc.user){
     return res.status(500).send("Database connection error");
@@ -487,6 +550,83 @@ app.get("/personnel", async (req, res) => {
   ]).toArray();
   return res.status(200).json(data);
 })
+
+app.get("/personnelStats", async (req, res) => {
+  if (!db || !req.oidc.user) {
+    return res.status(500).send("Database connection error");
+  }
+
+  const schoolId: string = req.oidc.user[SCHOOL_NAMESPACE] || "";
+  const school = schoolId == "Admin" ? Number(req.query.school) : Number(schoolId);
+
+  const field = req.query.field ? req.query.field : undefined;
+  let filter = {};
+
+  const schoolDoc = await db.collection("School").findOne({ ID: school });
+  if (!schoolDoc) {
+    return res.status(404).json({ error: "School not found" });
+  }
+
+  const groupCd = schoolDoc.REGION_CD;
+
+  const peerSchools = await db.collection("School").find({ REGION_CD: groupCd }).toArray();
+  const peerSchoolIds = peerSchools.map((s) => s.ID);
+
+  switch (field) {
+    case "TOTAL TEACHER FTES":
+      filter = { EMP_CAT_CD: "EMPCAT_T", SCHOOL_ID: { $in: peerSchoolIds } };
+      break;
+    case "TOTAL FTES":
+      filter = { SCHOOL_ID: { $in: peerSchoolIds } };
+      break;
+    case "TEACHER ATTRITION":
+      filter = { SCHOOL_ID: { $in: peerSchoolIds } };
+      break;
+    default:
+      return res.status(400).json({ error: "Invalid or missing field" });
+  }
+
+  const data = await db.collection("EmployeePersonnel").aggregate([
+    { $match: filter },
+    {
+      $lookup: {
+        from: "SchoolYear",
+        localField: "SCHOOL_YR_ID",
+        foreignField: "ID",
+        as: "year"
+      }
+    },
+    { $unwind: "$year" },
+    {
+      $group: {
+        _id: "$year.ID",
+        year: { $first: "$year.SCHOOL_YEAR" },
+        fullTimeEmployees: { $sum: "$FT_EMPLOYEES" }
+      }
+    },
+    { $sort: { "_id": 1 } },
+    { $project: { _id: 0, YEAR: "$year", DATA: "$fullTimeEmployees" } }
+  ]).toArray();
+
+  if (data.length === 0) {
+    return res.status(200).json({ average: 0, median: 0, range: { min: 0, max: 0 }});
+  }
+
+  const values = data.map((d) => d.DATA as number).sort((a, b) => a - b);
+  const count = values.length;
+
+  const average = parseFloat((values.reduce((sum, v) => sum + v, 0) / count).toFixed(2));
+
+  const median =
+      count % 2 === 0
+          ? parseFloat(((values[count / 2 - 1] + values[count / 2]) / 2).toFixed(2))
+          : values[Math.floor(count / 2)];
+
+  const range = { min: values[0], max: values[count - 1] };
+
+  return res.status(200).json({ average, median, range });
+});
+
 
 app.get("/personnelAttrition", async (req, res) => {
   if(!db || !req.oidc.user){
@@ -591,6 +731,125 @@ app.get("/personnelAttrition", async (req, res) => {
   return res.status(200).json(data);
 })
 
+app.get("/personnelAttritionStats", async (req, res) => {
+  if (!db || !req.oidc.user) {
+    return res.status(500).send("Database connection error");
+  }
+
+  const schoolId: string = req.oidc.user[SCHOOL_NAMESPACE] || "";
+  const school = schoolId == "Admin" ? Number(req.query.school) : Number(schoolId);
+  const field = req.query.field ? req.query.field : undefined;
+
+  // Look up the school's region group
+  const schoolDoc = await db.collection("School").findOne({ ID: school });
+  if (!schoolDoc) {
+    return res.status(404).json({ error: "School not found" });
+  }
+
+  const regionCd = schoolDoc.REGION_CD;
+
+  // Find all schools in the same region
+  const peerSchools = await db.collection("School").find({ REGION_CD: regionCd }).toArray();
+  const peerSchoolIds = peerSchools.map((s) => s.ID);
+
+  const filter = {
+    EMP_CAT_CD: "EMPCAT_T",
+    SCHOOL_ID: { $in: peerSchoolIds },
+  };
+
+  let valueStage = {};
+
+  if (field === "TEACHERS LOST") {
+    valueStage = {
+      $addFields: {
+        DATA: {
+          $max: [{ $multiply: ["$netChange", -1] }, 0]
+        }
+      }
+    };
+  } else if (field === "TEACHERS GAINED") {
+    valueStage = {
+      $addFields: {
+        DATA: {
+          $max: ["$netChange", 0]
+        }
+      }
+    };
+  }
+
+  const data = await db.collection("EmployeePersonnel").aggregate([
+    { $match: filter },
+    {
+      $lookup: {
+        from: "SchoolYear",
+        localField: "SCHOOL_YR_ID",
+        foreignField: "ID",
+        as: "year"
+      }
+    },
+    { $unwind: "$year" },
+    {
+      $group: {
+        _id: "$year.ID",
+        YEAR: { $first: "$year.ID" },
+        fullTimeEmployees: { $sum: "$FT_EMPLOYEES" }
+      }
+    },
+    { $sort: { _id: 1 } },
+    {
+      $setWindowFields: {
+        sortBy: { _id: 1 },
+        output: {
+          previousYearFT: {
+            $shift: {
+              output: "$fullTimeEmployees",
+              by: -1
+            }
+          }
+        }
+      }
+    },
+    {
+      $addFields: {
+        netChange: {
+          $subtract: [
+            "$fullTimeEmployees",
+            { $ifNull: ["$previousYearFT", "$fullTimeEmployees"] }
+          ]
+        }
+      }
+    },
+    valueStage,
+    {
+      $project: {
+        _id: 0,
+        YEAR: 1,
+        DATA: 1
+      }
+    }
+  ]).toArray();
+
+  // Compute stats
+  if (data.length === 0) {
+    return res.status(200).json({ average: 0, median: 0, range: { min: 0, max: 0 }});
+  }
+
+  const values = data.map((d) => d.DATA as number).sort((a, b) => a - b);
+  const count = values.length;
+
+  const average = parseFloat((values.reduce((sum, v) => sum + v, 0) / count).toFixed(2));
+
+  const median =
+      count % 2 === 0
+          ? parseFloat(((values[count / 2 - 1] + values[count / 2]) / 2).toFixed(2))
+          : values[Math.floor(count / 2)];
+
+  const range = { min: values[0], max: values[count - 1] };
+
+  return res.status(200).json({ average, median, range});
+});
+
+
 
 app.get("/enrollment-attrition", async (req, res) => {
   if (!db) return res.status(500).send("Database connection error");
@@ -646,6 +905,76 @@ app.get("/enrollment-attrition", async (req, res) => {
   ]).toArray();
 
   return res.status(200).json(data);
+});
+
+app.get("/enroll-attrition-stats", async (req, res) => {
+  if (!db || !req.oidc.user) return res.status(500).send("Database connection error");
+
+  const schoolId: string = req.oidc.user[SCHOOL_NAMESPACE] || "";
+  const school = schoolId == "Admin" ? Number(req.query.school) : Number(schoolId);
+  const year = req.query.year ? Number(req.query.year) : undefined;
+  const field = req.query.field as string | undefined;
+  const collection = req.query.collection as string | undefined;
+
+  const validFields = [
+    "STUDENTS_ADDED_DURING_YEAR",
+    "STUDENTS_GRADUATED",
+    "STUD_DISS_WTHD",
+    "STUD_NOT_RETURN",
+    "STUD_NOT_INV",
+    "EXCH_STUD_REPTS",
+  ];
+
+  const validCollections = ["EnrollAttrition", "EnrollAttritionSOC"];
+
+  if (!field || !validFields.includes(field)) {
+    return res.status(400).send("Invalid or missing field");
+  }
+
+  if (!collection || !validCollections.includes(collection)) {
+    return res.status(400).send("Invalid or missing collection");
+  }
+
+  // Look up the school's region and find all peers
+  const schoolDoc = await db.collection("School").findOne({ ID: school });
+  if (!schoolDoc) return res.status(404).json({ error: "School not found" });
+
+  const regionCd = schoolDoc.REGION_CD;
+  const peerSchools = await db.collection("School").find({ REGION_CD: regionCd }).toArray();
+  const peerSchoolIds = peerSchools.map((s) => s.ID);
+
+  const data = await db.collection(collection).aggregate([
+    {
+      $match: {
+        SCHOOL_ID: { $in: peerSchoolIds },
+        SCHOOL_YR_ID: year,
+      },
+    },
+    {
+      $group: {
+        _id: "$SCHOOL_ID",
+        total: { $sum: `$${field}` }
+      }
+    },
+  ]).toArray();
+
+  if (data.length === 0) {
+    return res.status(200).json({ average: 0, median: 0, range: { min: 0, max: 0 } });
+  }
+
+  const values = data.map((d) => d.total as number).sort((a, b) => a - b);
+  const count = values.length;
+
+  const average = parseFloat((values.reduce((sum, v) => sum + v, 0) / count).toFixed(2));
+
+  const median =
+      count % 2 === 0
+          ? parseFloat(((values[count / 2 - 1] + values[count / 2]) / 2).toFixed(2))
+          : values[Math.floor(count / 2)];
+
+  const range = { min: values[0], max: values[count - 1] };
+
+  return res.status(200).json({ average, median, range });
 });
 
 app.get("/schools", async (req, res) => {

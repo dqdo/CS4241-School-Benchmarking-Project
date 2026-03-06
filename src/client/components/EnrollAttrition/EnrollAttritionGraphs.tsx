@@ -19,6 +19,12 @@ export type EnrollAttritionGraphsProps = {
     chartNumber?: number;
 };
 
+type Stats = {
+    average: number;
+    median: number;
+    range: { min: number; max: number };
+};
+
 export default function EnrollAttritionGraphs({
                                                   config,
                                                   updateConfig,
@@ -33,10 +39,11 @@ export default function EnrollAttritionGraphs({
                                                   showRemove,
                                                   chartNumber,
                                               }: EnrollAttritionGraphsProps) {
-    const [graphData, setGraphData]               = useState<GraphData[]>([]);
+    const [graphData, setGraphData]                   = useState<GraphData[]>([]);
     const [secondaryGraphData, setSecondaryGraphData] = useState<GraphData[]>([]);
+    const [stats, setStats]                           = useState<Stats | null>(null);
 
-    async function fetchData(fetchField: string): Promise<GraphData[]> {
+    async function fetchData(fetchField: string, isPrimary: boolean = false): Promise<GraphData[]> {
         if (!config.schoolSelection || !config.yearSelection) return [];
 
         const params = {
@@ -50,6 +57,12 @@ export default function EnrollAttritionGraphs({
         const response = await fetch(`/enrollment-attrition?${queryString}`);
         const data = await response.json();
 
+        if (isPrimary) {
+            const statsResponse = await fetch(`/enroll-attrition-stats?${queryString}`);
+            const statData = await statsResponse.json();
+            setStats(statData);
+        }
+
         return data.map((row: any): GraphData => ({ x: row.DESCRIPTION, y: row.VALUE }));
     }
 
@@ -57,11 +70,11 @@ export default function EnrollAttritionGraphs({
         let isMounted = true;
 
         const loadData = async () => {
-            const primary = await fetchData(field);
+            const primary = await fetchData(field, true);
             if (isMounted) setGraphData(primary);
 
             if (config.secondaryField) {
-                const secondary = await fetchData(config.secondaryField);
+                const secondary = await fetchData(config.secondaryField, false);
                 if (isMounted) setSecondaryGraphData(secondary);
             } else {
                 if (isMounted) setSecondaryGraphData([]);
@@ -94,7 +107,6 @@ export default function EnrollAttritionGraphs({
                 </div>
             )}
             <div className="flex flex-wrap gap-2 mb-4 p-2 bg-gray-50 rounded justify-center items-center">
-                {/* Chart type */}
                 <select
                     className="border p-1 text-sm rounded outline-none font-semibold text-[#0A3E6C]"
                     value={config.chartType}
@@ -106,7 +118,6 @@ export default function EnrollAttritionGraphs({
                     <option value="doughnut">Doughnut</option>
                 </select>
 
-                {/* School */}
                 <select
                     className="border p-1 text-sm rounded outline-none"
                     value={config.schoolSelection}
@@ -118,7 +129,6 @@ export default function EnrollAttritionGraphs({
                     ))}
                 </select>
 
-                {/* Year */}
                 <select
                     className="border p-1 text-sm rounded outline-none"
                     value={config.yearSelection}
@@ -130,7 +140,6 @@ export default function EnrollAttritionGraphs({
                     ))}
                 </select>
 
-                {/* Dual axis controls */}
                 {isDualAxisCompatible && (
                     <>
                         <select
@@ -184,17 +193,38 @@ export default function EnrollAttritionGraphs({
                 )}
             </div>
 
-            <div className="flex-grow flex items-center justify-center w-full">
-                <div className="w-full">
-                    <Graph
-                        label={label}
-                        secondaryLabel={config.secondaryLabel}
-                        chartType={config.chartType as any}
-                        secondaryChartType={config.secondaryChartType as any}
-                        data={graphData}
-                        secondaryData={secondaryGraphData}
-                    />
+            <div className="flex-grow flex gap-4">
+                {/* Graph */}
+                <div className="flex-grow flex items-center justify-center min-w-0">
+                    <div className="w-full">
+                        <Graph
+                            label={label}
+                            secondaryLabel={config.secondaryLabel}
+                            chartType={config.chartType as any}
+                            secondaryChartType={config.secondaryChartType as any}
+                            data={graphData}
+                            secondaryData={secondaryGraphData}
+                        />
+                    </div>
                 </div>
+
+                {/* Peer Group Stats */}
+                {stats && (
+                    <div className="flex flex-col justify-center gap-2 w-28 shrink-0">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide text-center">Peer Group</p>
+                        {[
+                            { label: "Avg",    value: stats.average },
+                            { label: "Median", value: stats.median },
+                            { label: "Min",    value: stats.range.min },
+                            { label: "Max",    value: stats.range.max },
+                        ].map(({ label, value }) => (
+                            <div key={label} className="bg-[#f0f5fb] rounded-lg p-2 text-center">
+                                <p className="text-xs text-[#0A3E6C] font-semibold uppercase tracking-wide">{label}</p>
+                                <p className="text-sm font-bold text-[#0A3E6C] mt-0.5">{value.toLocaleString()}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );

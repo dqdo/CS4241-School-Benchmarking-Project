@@ -18,12 +18,18 @@ export type AdmissionGraphsProps = {
     chartNumber?: number;
 };
 
+type Stats = {
+    average: number;
+    median: number;
+    range: { min: number; max: number };
+};
+
 export default function AdmissionGraphs({ config, updateConfig, removeChart, clearChart, label, availableTabs, schools, years, grades, showRemove, chartNumber }: AdmissionGraphsProps) {
-    // States to hold the fetched data to pass down to Graph component
     const [graphData, setGraphData] = useState<GraphData[]>([]);
     const [secondaryGraphData, setSecondaryGraphData] = useState<GraphData[]>([]);
+    const [stats, setStats] = useState<Stats | null>(null);
 
-    async function fetchAdmissions(fieldLabel: string = label) {
+    async function fetchAdmissions(fieldLabel: string = label, isPrimary: boolean = false) {
         if (!config.schoolSelection) return [];
         if (!config.yearSelection && !config.gradeSelection) return [];
 
@@ -38,6 +44,12 @@ export default function AdmissionGraphs({ config, updateConfig, removeChart, cle
         const response = await fetch(`/admissions?${queryString}`);
         const data = await response.json();
 
+        if (isPrimary) {
+            const statsResponse = await fetch(`/admissionsStats?${queryString}`);
+            const statData = await statsResponse.json();
+            setStats(statData);
+        }
+
         if (config.gradeSelection) {
             return data.map((row: any): GraphData => ({ x: row.YEAR, y: row.DATA }));
         }
@@ -45,16 +57,16 @@ export default function AdmissionGraphs({ config, updateConfig, removeChart, cle
         return data.map((row: any): GraphData => ({ x: row.DESCRIPTION, y: row.DATA }));
     }
 
-    // React to changes and fetch the necessary data for both axes
     useEffect(() => {
         let isMounted = true;
 
         const loadData = async () => {
-            const primaryData = await fetchAdmissions(label);
+            const primaryData = await fetchAdmissions(label, true);
+            console.log(primaryData);
             if (isMounted) setGraphData(primaryData);
 
             if (config.secondaryLabel) {
-                const secondaryData = await fetchAdmissions(config.secondaryLabel);
+                const secondaryData = await fetchAdmissions(config.secondaryLabel, false);
                 if (isMounted) setSecondaryGraphData(secondaryData);
             } else {
                 if (isMounted) setSecondaryGraphData([]);
@@ -66,8 +78,11 @@ export default function AdmissionGraphs({ config, updateConfig, removeChart, cle
         return () => { isMounted = false };
     }, [config.schoolSelection, config.yearSelection, config.gradeSelection, config.secondaryLabel, label]);
 
+    useEffect(() => {
+        setGraphData([]);
+    }, [config.chartType]);
+
     const handleChartTypeChange = (newType: string) => {
-        // Only switch the chart type — preserve school/year/grade selections
         updateConfig({ ...config, chartType: newType });
     };
 
@@ -172,18 +187,39 @@ export default function AdmissionGraphs({ config, updateConfig, removeChart, cle
                 )}
             </div>
 
-            <div className="flex-grow flex items-center justify-center w-full">
-                <div className="w-full">
-                    <Graph
-                        label={label}
-                        secondaryLabel={config.secondaryLabel}
-                        chartType={config.chartType as any}
-                        secondaryChartType={config.secondaryChartType as any}
-                        data={graphData}
-                        secondaryData={secondaryGraphData}
-                    />
+            <div className="flex-grow flex gap-4">
+                {/* Graph */}
+                <div className="flex-grow flex items-center justify-center min-w-0">
+                    <div className="w-full">
+                        <Graph
+                            label={label}
+                            secondaryLabel={config.secondaryLabel}
+                            chartType={config.chartType as any}
+                            secondaryChartType={config.secondaryChartType as any}
+                            data={graphData}
+                            secondaryData={secondaryGraphData}
+                        />
+                    </div>
                 </div>
+
+                {/* Peer Group Stats */}
+                {stats && (
+                    <div className="flex flex-col justify-center gap-2 w-28 shrink-0">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide text-center">Peer Group</p>
+                        {[
+                            { label: "Avg",    value: stats.average },
+                            { label: "Median", value: stats.median },
+                            { label: "Min",    value: stats.range.min },
+                            { label: "Max",    value: stats.range.max },
+                        ].map(({ label, value }) => (
+                            <div key={label} className="bg-[#f0f5fb] rounded-lg p-2 text-center">
+                                <p className="text-xs text-[#0A3E6C] font-semibold uppercase tracking-wide">{label}</p>
+                                <p className="text-sm font-bold text-[#0A3E6C] mt-0.5">{value.toLocaleString()}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
-    )
+    );
 }

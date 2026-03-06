@@ -19,10 +19,16 @@ export type AdmissionGraphsProps = {
     chartNumber?: number;
 };
 
+type Stats = {
+    average: number;
+    median: number;
+    range: { min: number; max: number };
+};
+
 export default function PersonnelGraphs({ config, updateConfig, removeChart, clearChart, label, availableTabs, schools, years, grades, showRemove, chartNumber }: AdmissionGraphsProps) {
-    // States to hold the fetched data to pass down to Graph component
     const [graphData, setGraphData] = useState<GraphData[]>([]);
     const [secondaryGraphData, setSecondaryGraphData] = useState<GraphData[]>([]);
+    const [stats, setStats] = useState<Stats | null>(null);
 
     async function fetchAdmissions(fieldLabel: string = label) {
         if (!config.schoolSelection) return [];
@@ -33,22 +39,37 @@ export default function PersonnelGraphs({ config, updateConfig, removeChart, cle
             grade: config.gradeSelection,
             field: fieldLabel.toUpperCase()
         };
-        console.log(params.field)
+
         const queryString = new URLSearchParams(params as any).toString();
-        if(params.field === "TEACHERS LOST" || params.field === "TEACHERS GAINED") {
+
+        if (params.field === "TEACHERS LOST" || params.field === "TEACHERS GAINED") {
             const response = await fetch(`/personnelAttrition?${queryString}`);
             const data = await response.json();
 
+
+            if (fieldLabel === label) {
+                console.log(queryString.toString())
+                const statsResponse = await fetch(`/personnelAttritionStats?${queryString}`);
+                const statData = await statsResponse.json();
+                setStats(statData);
+            }
+
+
             return data.map((row: any): GraphData => ({ x: row.YEAR, y: row.DATA }));
-        }else{
-            const response = await fetch(`/personnel?${queryString}`) ;
+        } else {
+            const response = await fetch(`/personnel?${queryString}`);
             const data = await response.json();
+
+            if (fieldLabel === label) {
+                const statsResponse = await fetch(`/personnelStats?${queryString}`);
+                const statData = await statsResponse.json();
+                setStats(statData);
+            }
 
             return data.map((row: any): GraphData => ({ x: row.YEAR, y: row.DATA }));
         }
     }
 
-    // React to changes and fetch the necessary data for both axes
     useEffect(() => {
         let isMounted = true;
 
@@ -104,6 +125,7 @@ export default function PersonnelGraphs({ config, updateConfig, removeChart, cle
                     <option value="">Select School</option>
                     {schools.map(s => <option key={s.ID} value={s.ID}>{s.NAME_TX}</option>)}
                 </select>
+
                 {isDualAxisCompatible && (
                     <>
                         <select
@@ -151,18 +173,39 @@ export default function PersonnelGraphs({ config, updateConfig, removeChart, cle
                 )}
             </div>
 
-            <div className="flex-grow flex items-center justify-center w-full">
-                <div className="w-full">
-                    <Graph
-                        label={label}
-                        secondaryLabel={config.secondaryLabel}
-                        chartType={config.chartType as any}
-                        secondaryChartType={config.secondaryChartType as any}
-                        data={graphData}
-                        secondaryData={secondaryGraphData}
-                    />
+            <div className="flex-grow flex gap-4">
+                {/* Graph */}
+                <div className="flex-grow flex items-center justify-center min-w-0">
+                    <div className="w-full">
+                        <Graph
+                            label={label}
+                            secondaryLabel={config.secondaryLabel}
+                            chartType={config.chartType as any}
+                            secondaryChartType={config.secondaryChartType as any}
+                            data={graphData}
+                            secondaryData={secondaryGraphData}
+                        />
+                    </div>
                 </div>
+
+                {/* Peer Group Stats */}
+                {stats && (
+                    <div className="flex flex-col justify-center gap-2 w-28 shrink-0">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide text-center">Peer Group</p>
+                        {[
+                            { label: "Avg", value: stats.average },
+                            { label: "Median", value: stats.median },
+                            { label: "Min", value: stats.range.min },
+                            { label: "Max", value: stats.range.max },
+                        ].map(({ label, value }) => (
+                            <div key={label} className="bg-[#f0f5fb] rounded-lg p-2 text-center">
+                                <p className="text-xs text-[#0A3E6C] font-semibold uppercase tracking-wide">{label}</p>
+                                <p className="text-sm font-bold text-[#0A3E6C] mt-0.5">{value.toLocaleString()}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
-    )
+    );
 }
