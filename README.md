@@ -1,4 +1,6 @@
-Beyond the base requirements: 
-Additional components implemented were Employees (main), Admissions, and Enrollment (Components A, B, and C within the assignment).
-AI chatbot for data related questions.
-Save drafts so users can return and complete forms later with an explicit “Save Draft”
+## Beyond the Base Requirements
+
+Additional components implemented were **Employees (main component)**, **Admissions**, and **Enrollment** (Components A, B, and C within the assignment).
+
+- **AI Chatbot** for answering data-related questions.
+- **Save Drafts** so users can return and complete forms later with an explicit **“Save Draft”** option.
