@@ -1,0 +1,47 @@
+Basic school lookups
+"List all schools"
+"Is SC_School_01 an active school?"
+"What region is MANLIUS PEBBLE HILL SCHOOL in?"
+"What school years are available?"
+"What is the current school year?"
+
+Admission data
+"How many completed applications did SC_School_01 receive?"
+"What is the enrollment capacity for SC_School_01?"
+"How many students contracted to enroll at SC_School_01?"
+"What is the acceptance rate for SC_School_01?"
+"What is the yield rate for SC_School_01?"
+
+Attrition data
+"How many students were dismissed or withdrawn from SC_School_01?"
+"How many students chose not to return to SC_School_01?"
+"How many students graduated from SC_School_01?"
+"What is the attrition rate for SC_School_01?"
+
+Staff and personnel
+"How many total employees does SC_School_01 have?"
+"How many full time employees does SC_School_01 have?"
+"What employee categories exist at SC_School_01?"
+"What admin staff functions exist at SC_School_01?"
+"How many people of color are employed at SC_School_01?"
+
+Students of color diversity
+"What is the diversity rate for new enrollments at SC_School_01?"
+"How do students of color attrition numbers compare to overall attrition at SC_School_01?"
+"How many students of color applied to SC_School_01?"
+
+Multi-turn follow-ups (these specifically test history handling)
+Ask "List all schools" then follow with "Which of those are in the NC region?"
+Ask "What is the acceptance rate for SC_School_01?" then "What about the yield rate?"
+Ask "How many employees does SC_School_01 have?" then "How many are people of color?"
+
+Conversational fallback (should return needsData: false)
+"Hello"
+"What is an acceptance rate?"
+"How is attrition calculated?"
+"Can you put that in a numbered list?"
+
+Edge cases worth testing
+A school name that doesn't exist: "What is the acceptance rate for FAKE_SCHOOL?"
+A vague question: "Which school is the best?"
+Admin-only as a school user: "What is the salary range at SC_School_01?" — should not return salary fields
