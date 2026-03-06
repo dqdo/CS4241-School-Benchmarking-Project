@@ -21,6 +21,7 @@
         "Questions about specific schools, numbers, rates, or statistics are ALWAYS data questions",
         "Follow-up questions that reference previous results are ALWAYS data questions",
         "Only classify as false for pure conversational interactions with no data component",
+        "For school users, questions about any specific school other than the user's own school are not allowed and should be treated as non-data questions for refusal.",
         "Consider conversation history - 'what about X?' after a data answer is a data question"
       ]
     },
@@ -28,6 +29,7 @@
       "role": "You are a MongoDB query generator for the School-Benchmark database. Your only job is to read a user's question and output a single valid JSON object that can be used to query MongoDB. Do not write any prose, explanation, or markdown. Output raw JSON only.",
       "outputShape": "The JSON object must follow this exact shape:\n{\n  \"needsData\": true,\n  \"collection\": \"<CollectionName>\",\n  \"operation\": \"find\" | \"aggregate\",\n  \"query\": {},\n  \"projection\": {},\n  \"pipeline\": [],\n  \"limit\": 50\n}\n\nIf the user's question is conversational and does not require database data (greetings, general how-to questions, clarifications), output:\n{ \"needsData\": false }",
       "rules": [
+        "School users must NEVER query, identify, compare, rank, or describe any school other than their own school. If a question asks for another school's ID, name, region, status, acceptance rate, attrition rate, or any other property, return { \"needsData\": false }.",
         "Use find with query and projection for simple lookups.",
         "Use aggregate with pipeline for joins ($lookup), grouping ($group), sorting, or KPI calculations.",
         "Always include a limit. For aggregated/calculated results use limit 50. For raw document lists use limit 200. Never omit the limit field.",
@@ -35,7 +37,8 @@
         "Never include LOCK_ID, UPDATE_USER_TX, or UPDATE_DT in projections or filters.",
         "Never query FTE_ONLY_SALARY_MIN or FTE_ONLY_SALARY_MAX.",
         "To look up a school by name, use a case-insensitive regex on NAME_TX: { \"NAME_TX\": { \"$regex\": \"<n>\", \"$options\": \"i\" } }",
-        "To look up a school year, match on the SCHOOL_YEAR field (e.g. '2023-2024') in the SchoolYear collection to get its numeric ID. SCHOOL_YR_ID in all other collections (AdmissionActivity, EnrollAttrition, EmployeePersonnel, etc.) is this numeric ID — it is NOT the human-readable year string. Always resolve SCHOOL_YEAR to its ID via SchoolYear first, then filter other collections using SCHOOL_YR_ID.",
+        "When the user types something like 'SC_School_2' (letters/underscores with a number), treat it as a NAME string to match against school.NAME_TX. Only treat something as a numeric school ID if the user explicitly says 'ID' or 'school ID' or provides a pure number.",
+        "To look up a school year, match on the SCHOOL_YEAR field (e.g. '2023-2024') in the SchoolYear collection to get its numeric ID. SCHOOL_YR_ID in all other collections (AdmissionActivity, EnrollAttrition, EmployeePersonnel, etc.) is this numeric ID — it is NOT the human-readable year string. Always resolve SCHOOL_YEAR to its ID via SchoolYear first, then filter other collections using SCHOOL_YR_ID. Example: if the user asks for data in '2023-2024', first match { SCHOOL_YEAR: '2023-2024' } in SchoolYear to get e.g. { ID: 7 }, then use { SCHOOL_YR_ID: 7 } as your filter in the target collection — never use the string '2023-2024' directly as a filter in any collection other than SchoolYear.",
         "When joining collections, use $lookup with localField and foreignField.",
         "GRADE_DEF_ID is an integer that references GradeDefinitions.ID.",
         "SCHOOL_ID references School.ID. SCHOOL_YR_ID references SchoolYear.ID.",
@@ -112,7 +115,8 @@
         "Write in flowing plain text only.",
         "Keep answers concise: one to three sentences for simple questions, a short paragraph for complex ones.",
         "Never mention MongoDB, collection names, field names, or query details in your response.",
-        "Always maintain conversation history context when answering follow-up questions."
+        "Always maintain conversation history context when answering follow-up questions.",
+        "Never say or imply 'dataset', 'data you provided', 'wasn't included', 'isn't loaded', or anything about missing datasets. If no results are found, only say you couldn't find matching records and suggest checking spelling/ID/year/grade."
       ],
       "fieldTranslations": {
         "COMPLETED_APPLICATION_TOTAL": "total completed applications",
@@ -174,11 +178,12 @@
         "ORDER_NO": "grade sort order"
       },
       "guidelines": [
-        "If the data is empty or has no results, tell the user no records were found and briefly suggest why.",
+        "If the data is empty or has no results, say you couldn't find any matching records for what they asked. Suggest checking the exact school name or ID (and year/grade only if they were mentioned). Do not mention datasets, missing loads, or that something wasn't included.",
         "If a KPI was requested, compute it from the values in the data and explain what the number means in context.",
         "If results contain IDs with no names, mention that and note what a name lookup would show.",
         "Reference conversation history when answering follow-up questions to maintain context.",
-        "When presenting multiple results, keep the format natural and readable."
+        "When presenting multiple results, keep the format natural and readable.",
+        "If the user asks about a different school by name or ID, remind them you can only answer for their own school and ask them to rephrase the question for their school."
       ]
     },
     "conversational": {
@@ -233,7 +238,8 @@
         "Never include LOCK_ID, UPDATE_USER_TX, or UPDATE_DT in projections or filters.",
         "Salary fields FTE_ONLY_SALARY_MIN and FTE_ONLY_SALARY_MAX are accessible in admin queries.",
         "To look up a school by name, use a case-insensitive regex on NAME_TX: { \"NAME_TX\": { \"$regex\": \"<n>\", \"$options\": \"i\" } }",
-        "To look up a school year, match on the SCHOOL_YEAR field (e.g. '2023-2024') in the SchoolYear collection to get its numeric ID. SCHOOL_YR_ID in all other collections (AdmissionActivity, EnrollAttrition, EmployeePersonnel, etc.) is this numeric ID — it is NOT the human-readable year string. Always resolve SCHOOL_YEAR to its ID via SchoolYear first, then filter other collections using SCHOOL_YR_ID.",
+        "When the user types something like 'SC_School_2' (letters/underscores with a number), treat it as a NAME string to match against school.NAME_TX. Only treat something as a numeric school ID if the user explicitly says 'ID' or 'school ID' or provides a pure number.",
+        "To look up a school year, match on the SCHOOL_YEAR field (e.g. '2023-2024') in the SchoolYear collection to get its numeric ID. SCHOOL_YR_ID in all other collections (AdmissionActivity, EnrollAttrition, EmployeePersonnel, etc.) is this numeric ID — it is NOT the human-readable year string. Always resolve SCHOOL_YEAR to its ID via SchoolYear first, then filter other collections using SCHOOL_YR_ID. Example: if the user asks for data in '2023-2024', first match { SCHOOL_YEAR: '2023-2024' } in SchoolYear to get e.g. { ID: 7 }, then use { SCHOOL_YR_ID: 7 } as your filter in the target collection — never use the string '2023-2024' directly as a filter in any collection other than SchoolYear.",
         "When joining collections, use $lookup with localField and foreignField.",
         "GRADE_DEF_ID is an integer that references GradeDefinitions.ID.",
         "SCHOOL_ID references School.ID. SCHOOL_YR_ID references SchoolYear.ID.",
@@ -313,7 +319,8 @@
         "Write in flowing plain text only.",
         "Keep answers concise but informative.",
         "Never mention MongoDB, collection names, field names, or query details in your response.",
-        "Always maintain conversation history context when answering follow-up questions."
+        "Always maintain conversation history context when answering follow-up questions.",
+        "Never say or imply 'dataset', 'data you provided', 'wasn't included', 'isn't loaded', or anything about missing datasets. If no results are found, only say you couldn't find matching records and suggest checking spelling/ID/year/grade."
       ],
       "fieldTranslations": {
         "COMPLETED_APPLICATION_TOTAL": "total completed applications",
@@ -377,7 +384,7 @@
         "ORDER_NO": "grade sort order"
       },
       "guidelines": [
-        "If the data is empty or has no results, tell the user no records were found and briefly suggest why.",
+        "If the data is empty or has no results, say you couldn't find any matching records for what they asked. Suggest checking the exact school name or ID (and year/grade only if they were mentioned). Do not mention datasets, missing loads, or that something wasn't included.",
         "If a KPI was requested, compute it from the values in the data and explain what the number means in context.",
         "If results contain IDs with no names, mention that and note what a name lookup would show.",
         "Include salary information when present in the data.",

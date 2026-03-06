@@ -35,6 +35,35 @@ const config = {
 
 app.use(express.json());
 app.use(auth(config));
+
+app.use(async (req, _res, next) => {
+  // express-openid-connect puts the auth user here:
+  const email = req.oidc?.user?.email;
+  if (!email) return next();
+
+  try {
+    // IMPORTANT: this is the DB you used for user mapping elsewhere
+    const mappingDb = client.db("Test-School-Benchmark");
+
+    const userMapping = await mappingDb.collection("Users").findOne(
+        { email },
+        { projection: { _id: 0, SCHOOL_ID: 1, ROLE: 1, IS_ADMIN: 1 } }
+    );
+
+    // Attach a simple user object onto the request.
+    // (ROLE / IS_ADMIN depends on how your Users docs are shaped)
+    (req as any).user = {
+      email,
+      schoolId: userMapping?.SCHOOL_ID,
+      isAdmin: !!(userMapping?.IS_ADMIN || userMapping?.ROLE === "admin"),
+    };
+  } catch (e) {
+    console.error("[userContext] failed to load user mapping:", e);
+  }
+
+  next();
+});
+
 app.use("/", requireAuth); // get/post is always protected by being logged in. If not logged in, users are redirected to login page
 app.use("/admin", requireAdmin); // get/post path should be /admin/xxx if the route should only be accessed my admins
 app.use("/", chatbotAi);
@@ -42,11 +71,6 @@ app.use("/", chatbotAi);
 let db: Db | undefined = undefined;
 const SCHOOL_NAMESPACE = "https://cs4241-school-benchmarking-project-1.onrender.com/schoolId";
 
-/*
-  Users:
-  admin@gmail.com AdminUser!
-  school-user@gmail.com SchoolUser!
- */
 
 function parseYearRange(req: any) {
     const yearStart = req.query.yearStart ? Number(req.query.yearStart) : undefined;
