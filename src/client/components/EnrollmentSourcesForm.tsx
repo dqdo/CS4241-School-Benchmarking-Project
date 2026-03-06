@@ -4,39 +4,34 @@ import { useSchoolDataForm } from '../hooks/useSchoolDataForm';
 import { DropdownSection } from './DropdownSection';
 import ValidatedNumberInput from "./ValidatedNumberInput";
 
-const PERSONNEL_FIELDS = [
-    { name: 'TOTAL_EMPLOYEES', label: 'Total Employees', tooltip: 'Total headcount of all employees at the school.' },
-    { name: 'FT_EMPLOYEES', label: 'Full-Time Employees', tooltip: 'Headcount of full-time employees.' },
-    { name: 'POC_EMPLOYEES', label: 'Employees of Color (POC)', tooltip: 'Headcount of employees of color.' },
-    { name: 'FTE_ONLY_NUM', label: 'FTE Count', tooltip: 'Total Full-Time Equivalent (FTE) numeric count.' },
-    { name: 'SUBCONTRACT_NUM', label: 'Subcontractors', tooltip: 'Total headcount of subcontracted workers.' },
-    { name: 'SUBCONTRACT_FTE', label: 'Subcontractor FTE', tooltip: 'FTE count representing subcontractors.' }
+const INQUIRY_FIELDS = [
+    { name: 'INQUIRIES_M', label: 'Inquiries (Boys)', tooltip: 'Enrolled boys who inquired last year.' },
+    { name: 'INQUIRIES_F', label: 'Inquiries (Girls)', tooltip: 'Enrolled girls who inquired last year.' },
+    { name: 'INQUIRIES_U', label: 'Inquiries (All/Unspecified)', tooltip: 'Enrolled students of all/unspecified genders who inquired last year.' }
 ] as const;
 
-const ADMIN_FIELDS = [
-    { name: 'NR_EXEMPT', label: 'Exempt Admin Staff', tooltip: 'Headcount of exempt administrative employees.' },
-    { name: 'NR_NONEXEMPT', label: 'Non-Exempt Admin Staff', tooltip: 'Headcount of non-exempt administrative employees.' },
-    { name: 'FTE_EXEMPT', label: 'Exempt Admin FTE', tooltip: 'Full-Time Equivalent count of exempt admin employees.' },
-    { name: 'FTE_NONEXEMPT', label: 'Non-Exempt Admin FTE', tooltip: 'Full-Time Equivalent count of non-exempt admin employees.' }
+const FACULTY_FIELDS = [
+    { name: 'FACULTYCHILD_M', label: 'Faculty Children (Boys)', tooltip: 'Enrolled boys who are children of faculty/staff.' },
+    { name: 'FACULTYCHILD_F', label: 'Faculty Children (Girls)', tooltip: 'Enrolled girls who are children of faculty/staff.' },
+    { name: 'FACULTYCHILD_U', label: 'Faculty Children (All/Unspecified)', tooltip: 'Enrolled students of all/unspecified genders who are children of faculty/staff.' }
 ] as const;
 
-const ALL_FIELDS = [...PERSONNEL_FIELDS, ...ADMIN_FIELDS];
+const ALL_FIELDS = [...INQUIRY_FIELDS, ...FACULTY_FIELDS];
 
 const INITIAL_FORM_STATE = {
     SCHOOL_YR_ID: "",
     ...Object.fromEntries(ALL_FIELDS.map(field => [field.name, ""]))
 };
 
-export default function EmployeeForm({ schoolId }: { schoolId: string }) {
+export default function EnrollmentSourcesForm({ schoolId }: { schoolId: string }) {
     const { schoolYears, loading, submitStatus, fetchAutofillData, submitForm, saveDraft, loadDraft, resetSubmitStatus } = useSchoolDataForm({
-        endpoint: '/api/submit-employee',
-        dataEndpoint: '/api/employee-data',
+        endpoint: '/api/submit-enrollment-sources',
+        dataEndpoint: '/api/enrollment-sources-data',
         schoolId
     });
 
     const [formData, setFormData] = useState(INITIAL_FORM_STATE);
 
-    //Fetch autofill data when year is selected
     useEffect(() => {
         if (formData.SCHOOL_YR_ID) {
             fetchAutofillData(formData.SCHOOL_YR_ID).then(data => {
@@ -78,7 +73,7 @@ export default function EmployeeForm({ schoolId }: { schoolId: string }) {
             alert("Please select a Year to save a draft.");
             return;
         }
-        const result = await saveDraft("Employee", formData);
+        const result = await saveDraft("EnrollmentSources", formData);
         if (result.success) alert("Draft saved successfully!");
     };
 
@@ -87,7 +82,7 @@ export default function EmployeeForm({ schoolId }: { schoolId: string }) {
             alert("Please select a Year to load its draft.");
             return;
         }
-        const data = await loadDraft("Employee", formData.SCHOOL_YR_ID);
+        const data = await loadDraft("EnrollmentSources", formData.SCHOOL_YR_ID);
         if (data) {
             setFormData(prev => ({ ...prev, ...data }));
             alert("Draft loaded!");
@@ -106,21 +101,21 @@ export default function EmployeeForm({ schoolId }: { schoolId: string }) {
 
     const FORM_SECTIONS = [
         {
-            title: "General Personnel",
-            description: "Overall employee and subcontractor headcount metrics.",
-            fields: PERSONNEL_FIELDS
+            title: "Standard Inquiries",
+            description: "Students who formally inquired in the previous school year.",
+            fields: INQUIRY_FIELDS
         },
         {
-            title: "Administrative Support",
-            description: "Breakdown of exempt and non-exempt administrative staff.",
-            fields: ADMIN_FIELDS
+            title: "Faculty Children",
+            description: "Enrolled children of current faculty and staff members.",
+            fields: FACULTY_FIELDS
         }
     ];
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
-            <h2 className="text-2xl font-semibold text-[#1E3869]">Employee Data</h2>
-            <p className="text-gray-600 text-sm">Track employee headcounts, FTEs, and administrative support staff.</p>
+            <h2 className="text-2xl font-semibold text-[#1E3869]">Enrollment Sources</h2>
+            <p className="text-gray-600 text-sm">Track where your student population originates from by gender identity.</p>
 
             {submitStatus === 'success' && (
                 <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded flex items-center gap-2">
@@ -197,7 +192,7 @@ export default function EmployeeForm({ schoolId }: { schoolId: string }) {
                     disabled={loading}
                     className="bg-[#0693E3] text-white px-8 py-3 rounded font-semibold hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
-                    {loading ? 'Saving...' : 'Save Employee Data'}
+                    {loading ? 'Saving...' : 'Save Enrollment Sources'}
                 </button>
             </div>
         </form>

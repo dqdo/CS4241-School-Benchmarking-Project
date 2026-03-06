@@ -1,34 +1,46 @@
 import { useEffect, useState } from "react";
+import KPITile from "./KPITile";
 
 type PersonnelKPIsProps = {
     selectedSchool: string;
-}
+    yearStartId: number;
+    yearEndId: number;
+    navigateTo: (tabIndex: number) => void;
+};
 
-export default function PersonnelKPIs(props: PersonnelKPIsProps) {
-    const [totalTeacherFTEs, setTotalTeacherFTEs] = useState(0);
-    const [totalFTEs, setTotalFTEs] = useState(0);
+export default function PersonnelKPIs({ selectedSchool, yearStartId, yearEndId, navigateTo }: PersonnelKPIsProps) {
+    const [totalTeacherFTEs, setTotalTeacherFTEs] = useState<number | null>(null);
+    const [totalFTEs, setTotalFTEs]               = useState<number | null>(null);
 
     useEffect(() => {
-        if (!props.selectedSchool) return;
+        if (!selectedSchool) return;
+        setTotalTeacherFTEs(null); setTotalFTEs(null);
+        const params = new URLSearchParams({
+            school: selectedSchool,
+            yearStart: String(yearStartId),
+            yearEnd: String(yearEndId),
+        }).toString();
+        fetch("/totalTeacherFTEs?" + params).then(r => r.json()).then(d => setTotalTeacherFTEs(d.totalTeacherFTEs));
+        fetch("/totalFTEs?"        + params).then(r => r.json()).then(d => setTotalFTEs(d.totalFTEs));
+    }, [selectedSchool, yearStartId, yearEndId]);
 
-        const params = { school: props.selectedSchool };
-        const queryString = new URLSearchParams(params).toString();
+    const fmt = (v: number | null) => v === null ? "—" : v.toFixed(1);
 
-        fetch("/totalTeacherFTEs?" + queryString).then(res => res.json()).then(d => setTotalTeacherFTEs(d.totalTeacherFTEs));
-        fetch("/totalFTEs?" + queryString).then(res => res.json()).then(d => setTotalFTEs(d.totalFTEs));
-    }, [props.selectedSchool]);
+    // Tab index 4 = "Personnel"
+    const goToPersonnel = () => navigateTo(4);
 
     return (
-        <div className="flex flex-wrap justify-center gap-6 p-4">
-            <div className="cursor-default flex flex-col items-center justify-center bg-[#0A3E6C] text-white rounded-2xl shadow-2xl w-48 h-48 hover:bg-[#0066CC] hover:scale-105 transition-all duration-300">
-                <h1 className="text-xl font-semibold mb-2">Total Teacher FTEs</h1>
-                <h2 className="text-3xl font-bold">{totalTeacherFTEs.toFixed(2)}</h2>
-            </div>
-
-            <div className="cursor-default flex flex-col items-center justify-center bg-[#0A3E6C] text-white rounded-2xl shadow-2xl w-48 h-48 hover:bg-[#0066CC] hover:scale-105 transition-all duration-300">
-                <h1 className="text-xl font-semibold mb-2">Total FTEs</h1>
-                <h2 className="text-3xl font-bold">{totalFTEs.toFixed(2)}</h2>
-            </div>
-        </div>
+        <>
+            <KPITile label="Teacher FTEs"
+                     value={fmt(totalTeacherFTEs)}
+                     accent="#1A6B3C"
+                     tooltip="Total full-time equivalent teaching staff at your school across the selected year range. Part-time teachers count as a fraction of 1.0."
+                     onClick={goToPersonnel} />
+            <KPITile label="Total FTEs"
+                     value={fmt(totalFTEs)}
+                     accent="#1A6B3C"
+                     tooltip="Total headcount of all employees across the selected year range, covering every staff category."
+                     onClick={goToPersonnel} />
+        </>
     );
 }

@@ -1,18 +1,25 @@
 import { GoogleGenAI } from "@google/genai";
+import { Ollama } from "ollama";
 import { Router } from "express";
 import { Db } from "mongodb";
 import fs from "fs";
-
+import * as dotenv from "dotenv";
+dotenv.config();
 const router = Router();
 
 // Load AI prompt configurations from JSON file containing rules, guidelines, and examples for different user types
 const configPrompts = JSON.parse(fs.readFileSync("./src/server/prompt-config.json", "utf8"));
 
-// AI provider configuration - supports both Ollama (local) and Gemini (cloud) models
+// AI provider configuration - supports both Ollama (cloud) and Gemini (cloud) models
 const AI_PROVIDER: "gemini" | "ollama" = "ollama";
-const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://localhost:11434";
-const OLLAMA_MODEL = "gpt-oss:120b-cloud";
+const OLLAMA_MODEL = "gpt-oss:120b";
 const MAX_RETRY_ATTEMPTS = 3; // Maximum number of query retry attempts
+const ollama = new Ollama({
+    host: "https://ollama.com",
+    headers: {
+        Authorization: "Bearer " + process.env.OLLAMA_API_KEY,
+    },
+});
 
 let db: Db | undefined;
 
@@ -100,42 +107,38 @@ async function fetchLiveSchema(): Promise<string> {
 // Append live database schema to the base prompt for query generation
 async function buildQueryPrompt(basePrompt: string): Promise<string> {
     const schema = await fetchLiveSchema();
+    console.log("[schema] Live schema preview (first 500 chars):\n", schema.slice(0, 500));
     return `${basePrompt}\n\n${schema}`;
 }
 
+// Throw a consistent error when the client has cancelled the request
+function assertNotAborted(signal?: AbortSignal) {
+    if (signal?.aborted) {
+        throw new Error("Request aborted by client");
+    }
+}
+
 // Make a single-turn AI request with system prompt and user message
-// Supports both Ollama (local) and Gemini (cloud) providers
-async function callAI(systemPrompt: string, userMessage: string): Promise<string> {
+// Supports both Ollama (cloud) and Gemini (cloud) providers
+async function callAI(systemPrompt: string, userMessage: string, signal?: AbortSignal): Promise<string> {
+    assertNotAborted(signal);
+
     if (AI_PROVIDER === "ollama") {
-        const response = await fetch(`${OLLAMA_URL}/v1/chat/completions`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                model: OLLAMA_MODEL,
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: userMessage },
-                ],
-            }),
+        const response = await ollama.chat({
+            model: OLLAMA_MODEL,
+            stream: false,
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userMessage },
+            ],
         });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Ollama error: ${response.status} ${errorText}`);
-        }
+        assertNotAborted(signal);
 
-        const data = (await response.json()) as { choices: { message: { content: string } }[] };
-
-        // Check if we got a valid response with content
-        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-            throw new Error(`Ollama returned invalid response structure: ${JSON.stringify(data)}`);
-        }
-
-        const content = data.choices[0].message.content;
+        const content = response.message.content;
         if (!content || content.trim().length === 0) {
             console.warn("[callAI] Ollama returned empty content");
         }
-
         return content;
     }
 
@@ -145,12 +148,17 @@ async function callAI(systemPrompt: string, userMessage: string): Promise<string
         contents: [{ role: "user", parts: [{ text: userMessage }] }],
         config: { systemInstruction: systemPrompt },
     });
+
+    assertNotAborted(signal);
+
     return response.text ?? "";
 }
 
 // Make a multi-turn AI request with conversation history
 // Normalizes message formats between Ollama and Gemini
-async function callAIWithHistory(systemPrompt: string, history: any[], message: string): Promise<string> {
+async function callAIWithHistory(systemPrompt: string, history: any[], message: string, signal?: AbortSignal): Promise<string> {
+    assertNotAborted(signal);
+
     if (AI_PROVIDER === "ollama") {
         const messages = [
             { role: "system", content: systemPrompt },
@@ -162,14 +170,16 @@ async function callAIWithHistory(systemPrompt: string, history: any[], message: 
                 : []),
             { role: "user", content: message },
         ];
-        const response = await fetch(`${OLLAMA_URL}/v1/chat/completions`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ model: OLLAMA_MODEL, messages }),
+
+        const response = await ollama.chat({
+            model: OLLAMA_MODEL,
+            stream: false,
+            messages,
         });
-        if (!response.ok) throw new Error(`Ollama error: ${response.status}`);
-        const data = (await response.json()) as { choices: { message: { content: string } }[] };
-        return data.choices[0].message.content;
+
+        assertNotAborted(signal);
+
+        return response.message.content;
     }
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -181,6 +191,9 @@ async function callAIWithHistory(systemPrompt: string, history: any[], message: 
         ],
         config: { systemInstruction: systemPrompt },
     });
+
+    assertNotAborted(signal);
+
     return response.text ?? "";
 }
 
@@ -209,7 +222,7 @@ interface ValidationResult {
 
 // Step 1: Classify whether user question requires database query or conversational response
 // Uses AI classifier with recent conversation history to handle follow-up questions
-async function classifyQuestion(question: string, history: any[], isAdmin: boolean): Promise<ClassificationResult> {
+async function classifyQuestion(question: string, history: any[], isAdmin: boolean, signal?: AbortSignal): Promise<ClassificationResult> {
     console.log(`[classifyQuestion] Classifying: "${question}"`);
 
     const userPrompts = isAdmin ? configPrompts.admin : configPrompts.schoolUser;
@@ -227,7 +240,7 @@ async function classifyQuestion(question: string, history: any[], isAdmin: boole
     const classifierMessage = `Question: ${question}${historyContext}`;
 
     try {
-        const rawResponse = await callAI(classifierPrompt, classifierMessage);
+        const rawResponse = await callAI(classifierPrompt, classifierMessage, signal);
         console.log("[classifyQuestion] AI response:\n", rawResponse);
 
         const strippedResponse = rawResponse.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
@@ -280,7 +293,10 @@ function parseJsonFromAI(rawText: string): any {
 }
 
 // Execute MongoDB query based on query plan (supports both find and aggregate operations)
-async function executeQuery(queryPlan: QueryPlan): Promise<any[]> {
+// Respects AbortSignal: checks before issuing the DB call
+async function executeQuery(queryPlan: QueryPlan, signal?: AbortSignal): Promise<any[]> {
+    assertNotAborted(signal);
+
     if (!db) throw new Error("Database not connected");
     if (!queryPlan.collection) throw new Error("No collection specified");
 
@@ -288,7 +304,9 @@ async function executeQuery(queryPlan: QueryPlan): Promise<any[]> {
 
     if (queryPlan.operation === "aggregate" && queryPlan.pipeline) {
         console.log("[executeQuery] Running aggregate with pipeline:", JSON.stringify(queryPlan.pipeline, null, 2));
-        return collection.aggregate(queryPlan.pipeline).toArray();
+        const results = await collection.aggregate(queryPlan.pipeline).toArray();
+        assertNotAborted(signal);
+        return results;
     }
 
     console.log("[executeQuery] Running find with query:", JSON.stringify(queryPlan.query ?? {}, null, 2));
@@ -302,25 +320,38 @@ async function executeQuery(queryPlan: QueryPlan): Promise<any[]> {
         cursor = cursor.limit(queryPlan.limit);
     }
 
-    return cursor.toArray();
+    const results = await cursor.toArray();
+    assertNotAborted(signal);
+    return results;
 }
 
-// Validate AI-generated answer against query results to ensure accuracy
-// Checks for calculation errors, field mismatches, and logical inconsistencies
+// Validate AI-generated answer against query results to ensure accuracy.
+// Checks for calculation errors, field mismatches, and logical inconsistencies.
 async function validateAnswer(
     question: string,
     queryPlan: QueryPlan,
     results: any[],
     answer: string,
-    isAdmin: boolean
+    isAdmin: boolean,
+    history: any[],
+    signal?: AbortSignal
 ): Promise<ValidationResult> {
     console.log("[validateAnswer] Validating answer...");
 
     const userPrompts = isAdmin ? configPrompts.admin : configPrompts.schoolUser;
     const validatorPrompt = compilePrompt(userPrompts.validator);
 
+    const validatorHistoryContext = history.length > 0
+        ? `\n\nRecent conversation (use this to verify the correct school, year, or entity is being addressed):\n` +
+        history.slice(-4).map((h: any) => {
+            const role = h.role === "model" ? "Assistant" : "User";
+            const text = h.parts?.[0]?.text ?? h.content ?? "";
+            return `${role}: ${text}`;
+        }).join("\n")
+        : "";
+
     const validationMessage = `
-Original question: ${question}
+Original question: ${question}${validatorHistoryContext}
 
 Query plan used:
 ${JSON.stringify(queryPlan, null, 2)}
@@ -331,14 +362,13 @@ ${JSON.stringify(results, null, 2)}
 AI-generated answer:
 ${answer}
 
-Validate whether the answer correctly interprets the data.
+Validate whether the answer correctly interprets the data (correct KPI formulas, right school/year, no fabricated numbers).
 `;
 
     try {
-        const rawResponse = await callAI(validatorPrompt, validationMessage);
+        const rawResponse = await callAI(validatorPrompt, validationMessage, signal);
         console.log("[validateAnswer] AI response:\n", rawResponse);
 
-        // Check if we got an empty or invalid response
         if (!rawResponse || rawResponse.trim().length === 0) {
             console.warn("[validateAnswer] Received empty response from AI validator");
             return {
@@ -365,9 +395,9 @@ Validate whether the answer correctly interprets the data.
     }
 }
 
-// Remove MongoDB-specific fields (_id) and limit result size for AI processing
+// Remove MongoDB-specific fields (_id) from results for AI processing
 function sanitiseResults(results: any[]): any[] {
-    return results.slice(0, 50).map((doc) => {
+    return results.slice(0, 200).map((doc) => {
         const { _id, ...rest } = doc;
         return rest;
     });
@@ -379,31 +409,43 @@ async function generateQueryWithRetry(
     question: string,
     history: any[],
     isAdmin: boolean,
+    signal?: AbortSignal,
     previousAttempt?: { queryPlan: QueryPlan; error: string }
 ): Promise<QueryPlan> {
     console.log("[generateQueryWithRetry] Generating query plan...");
+
+    assertNotAborted(signal);
 
     const userPrompts = isAdmin ? configPrompts.admin : configPrompts.schoolUser;
     const queryGeneratorPrompt = compilePrompt(userPrompts.queryGenerator);
     const querySystemPrompt = await buildQueryPrompt(queryGeneratorPrompt);
 
-    let queryMessage = question;
+    // Build conversation history context so the query generator can resolve
+    // references like "the school" or "its id" from prior turns.
+    const historyContext = history.length > 0
+        ? `\n\nRecent conversation (use this to resolve any ambiguous references like "the school", "its", "that" etc.):\n` +
+        history.slice(-6).map((h: any) => {
+            const role = h.role === "model" ? "Assistant" : "User";
+            const text = h.parts?.[0]?.text ?? h.content ?? "";
+            return `${role}: ${text}`;
+        }).join("\n")
+        : "";
 
-    // If this is a retry, include context about the previous failed attempt
-    if (previousAttempt) {
-        queryMessage = `
+    let queryMessage = previousAttempt
+        ? `
 Previous query attempt FAILED with this plan:
 ${JSON.stringify(previousAttempt.queryPlan, null, 2)}
 
 Error encountered: ${previousAttempt.error}
 
 Please generate a DIFFERENT query approach for this question: ${question}
+${historyContext}
 
 ${previousAttempt.queryPlan.suggestedFix || "Try a different collection, operation type, or query structure."}
-`;
-    }
+`
+        : `${question}${historyContext}`;
 
-    const rawPlan = await callAI(querySystemPrompt, queryMessage);
+    const rawPlan = await callAI(querySystemPrompt, queryMessage, signal);
     console.log("[generateQueryWithRetry] AI response:\n", rawPlan);
 
     const strippedPlan = rawPlan.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
@@ -419,31 +461,44 @@ ${previousAttempt.queryPlan.suggestedFix || "Try a different collection, operati
 }
 
 // Main pipeline: Orchestrates the entire question-answering process with retry and validation logic
-// Steps: 1) Classify question, 2) Generate and execute query with retries, 3) Handle errors/empty results,
-// 4) Generate answer from results, 5) Validate answer accuracy, 6) Retry if validation fails
+// Steps: 1) Classify question, 2) Generate and execute query with retries (including empty results),
+// 3) Handle errors/empty results after all retries, 4) Generate answer from results,
+// 5) Validate answer accuracy, 6) Retry if validation fails
 async function answerWithData(
     question: string,
     history: any[],
     isAdmin: boolean,
-    validationAttempt: number = 0
+    signal?: AbortSignal,
+    validationAttempt: number = 0,
+    // When retrying after a failed validation, pass the last successful queryPlan
+    // so the query generator has context instead of treating the question as new.
+    priorQueryPlan: QueryPlan | null = null
 ): Promise<{ reply: string; queryPlan: QueryPlan | null; validation?: ValidationResult }> {
     console.log(`[answerWithData] Question: "${question}" | isAdmin: ${isAdmin} | history: ${history.length} turn(s) | validationAttempt: ${validationAttempt}`);
+
+    assertNotAborted(signal);
 
     const userPrompts = isAdmin ? configPrompts.admin : configPrompts.schoolUser;
     const conversationalPrompt = compilePrompt(userPrompts.conversational);
     const interpreterSystemPrompt = compilePrompt(userPrompts.interpreter);
 
     // STEP 1: Classify the question
-    const classification = await classifyQuestion(question, history, isAdmin);
+    const classification = await classifyQuestion(question, history, isAdmin, signal);
+
+    assertNotAborted(signal);
 
     if (!classification.isDataQuestion) {
         console.log("[answerWithData] Not a data question, using conversational response");
-        const reply = await callAIWithHistory(conversationalPrompt, history, question);
+        const reply = await callAIWithHistory(conversationalPrompt, history, question, signal);
         return { reply, queryPlan: null };
     }
 
-    // STEP 2: Generate and execute query (with retry logic)
-    let queryPlan: QueryPlan | null = null;
+    // STEP 2: Generate and execute query with retry logic for both errors AND empty results.
+    // On every attempt after the first, the previous queryPlan and failure reason are passed
+    // back to the AI so it can try a meaningfully different approach.
+    // On validation retries, seed queryPlan from the last successful plan so the query
+    // generator sees the prior approach and doesn't blindly return needsData: false.
+    let queryPlan: QueryPlan | null = priorQueryPlan;
     let results: any[] = [];
     let queryError: string | null = null;
     let attempt = 0;
@@ -452,65 +507,98 @@ async function answerWithData(
         attempt++;
         console.log(`[answerWithData] Query attempt ${attempt}/${MAX_RETRY_ATTEMPTS}`);
 
+        assertNotAborted(signal);
+
         try {
-            // Generate query (with context from previous failure if retrying)
-            const previousAttempt = queryError && queryPlan
-                ? { queryPlan, error: queryError }
+            // Build previousAttempt context whenever we have a prior plan, regardless of
+            // whether the last attempt threw an error or simply returned 0 results.
+            const previousAttempt = queryPlan
+                ? {
+                    queryPlan,
+                    error: queryError
+                        ?? `Query returned 0 results. Try a different approach — for example, loosening filters, checking field names, trying a different collection, or using a simpler pipeline.`,
+                }
                 : undefined;
 
-            queryPlan = await generateQueryWithRetry(question, history, isAdmin, previousAttempt);
+            // Reset error before each new attempt
+            queryError = null;
+
+            queryPlan = await generateQueryWithRetry(question, history, isAdmin, signal, previousAttempt);
+
+            assertNotAborted(signal);
 
             if (!queryPlan.needsData) {
                 console.log("[answerWithData] needsData=false, using conversational response");
-                const reply = await callAIWithHistory(conversationalPrompt, history, question);
+                const reply = await callAIWithHistory(conversationalPrompt, history, question, signal);
                 return { reply, queryPlan: null };
             }
 
-            // Execute query
             console.log(`[executeQuery] Collection: "${queryPlan.collection}" Operation: "${queryPlan.operation}"`);
-            const raw = await executeQuery(queryPlan);
+            const raw = await executeQuery(queryPlan, signal);
+            console.log(`[executeQuery] Raw results preview (first 500 chars):\n`, JSON.stringify(raw).slice(0, 500));
             results = sanitiseResults(raw);
-            console.log(`[executeQuery] Returned ${results.length} document(s)`);
+            console.log(`[executeQuery] Returned ${results.length} document(s) after sanitisation`);
 
-            // Query succeeded, break out of retry loop
-            queryError = null;
-            break;
+            // Only break out of the retry loop if we actually got results
+            if (results.length > 0) {
+                break;
+            }
+
+            console.log(`[answerWithData] Attempt ${attempt} returned 0 results, retrying with different query...`);
 
         } catch (err: any) {
+            // Re-throw abort errors immediately so the route handler can respond properly
+            if (err?.message === "Request aborted by client") throw err;
+
             queryError = err?.message ?? "Unknown error";
             console.error(`[executeQuery] Attempt ${attempt} failed:`, queryError);
 
-            // If this was the last attempt, we'll handle the error below
             if (attempt >= MAX_RETRY_ATTEMPTS) {
                 console.error("[executeQuery] Max retry attempts reached");
             }
         }
     }
 
-    // STEP 3: Handle query failure after all retries
+    assertNotAborted(signal);
+
+    // STEP 3: Handle hard query execution error after all retries
     if (queryError) {
-        const errorMessage = `I tried multiple approaches to retrieve the data, but encountered errors. ${
+        const errorMessage = `I tried ${MAX_RETRY_ATTEMPTS} different approaches to retrieve the data but encountered errors each time. ${
             results.length === 0
-                ? "The query couldn't be executed successfully. Could you rephrase your question or provide more specific details?"
+                ? "Could you rephrase your question or provide more specific details?"
                 : "However, I was able to retrieve some partial results."
         }`;
 
-        // If we have partial results, try to interpret them anyway
         if (results.length > 0) {
+            const errorHistoryContext = history.length > 0
+                ? `\n\nConversation history:\n${history.slice(-4).map((h: any) => {
+                    const role = h.role === "model" ? "Assistant" : "User";
+                    const text = h.parts?.[0]?.text ?? h.content ?? "";
+                    return `${role}: ${text}`;
+                }).join("\n")}`
+                : "";
             const dataContext = `Query results (${results.length} record${results.length === 1 ? "" : "s"}):\n${JSON.stringify(results, null, 2)}`;
-            const interpreterMessage = `User question: ${question}\n\n${dataContext}\n\nNote: This data may be incomplete due to query issues.`;
-            const reply = await callAI(interpreterSystemPrompt, interpreterMessage);
+            const interpreterMessage = `User question: ${question}${errorHistoryContext}\n\n${dataContext}\n\nNote: This data may be incomplete due to query issues.`;
+            const reply = await callAI(interpreterSystemPrompt, interpreterMessage, signal);
             return { reply: `${errorMessage}\n\n${reply}`, queryPlan };
         }
 
         return { reply: errorMessage, queryPlan };
     }
 
-    // STEP 4: Check if no results were found
+    // STEP 4: No results found after exhausting all retry attempts — tell the user clearly
     if (results.length === 0) {
+        const noResultsHistoryContext = history.length > 0
+            ? `\n\nConversation history:\n${history.slice(-4).map((h: any) => {
+                const role = h.role === "model" ? "Assistant" : "User";
+                const text = h.parts?.[0]?.text ?? h.content ?? "";
+                return `${role}: ${text}`;
+            }).join("\n")}`
+            : "";
         const reply = await callAI(
             interpreterSystemPrompt,
-            `User question: ${question}\n\nThe query returned no results. Let the user know nothing was found and suggest why that might be (e.g., school name spelled incorrectly, no data for that year, etc.).`
+            `User question: ${question}${noResultsHistoryContext}\n\nAll ${MAX_RETRY_ATTEMPTS} query attempts returned no results. Let the user know nothing was found and suggest why that might be (e.g., school name spelled incorrectly, no data for that year, grade level name may differ in the database, etc.).`,
+            signal
         );
         return { reply, queryPlan };
     }
@@ -526,28 +614,43 @@ async function answerWithData(
         : "";
 
     const interpreterMessage = `User question: ${question}${historyContext}\n\n${dataContext}`;
-    let reply = await callAI(interpreterSystemPrompt, interpreterMessage);
+    let reply = await callAI(interpreterSystemPrompt, interpreterMessage, signal);
 
-    // STEP 6: Validate the answer (only if we haven't exceeded validation attempts)
+    assertNotAborted(signal);
+
+    // STEP 6: Validate the answer.
+    //
+    // Skip validation for pure list/display requests (e.g. "list all those ids",
+    // "show me all schools").  These questions have no KPI calculation to verify,
+    // and passing 50 raw records to the validator reliably causes hallucinations
+    // about "missing" or "duplicate" entries that simply don't exist.
+    const isDisplayOnlyRequest = /^\s*(list|show|display|give me|what are|can you (list|show)|tell me).{0,60}(all|those|the).{0,40}(ids?|names?|schools?|records?)\s*\??\s*$/i.test(question);
+
+    if (isDisplayOnlyRequest) {
+        console.log("[answerWithData] Display-only request detected — skipping validation to prevent hallucination");
+        return { reply, queryPlan, validation: { isValid: true, reasoning: "Validation skipped for list/display request" } };
+    }
+
     if (validationAttempt < MAX_RETRY_ATTEMPTS) {
-        const validation = await validateAnswer(question, queryPlan!, results, reply, isAdmin);
+        const validation = await validateAnswer(question, queryPlan!, results, reply, isAdmin, history, signal);
+
+        assertNotAborted(signal);
 
         if (!validation.isValid) {
-            console.log(`[answerWithData] Answer validation failed (attempt ${validationAttempt + 1}/${MAX_RETRY_ATTEMPTS}), attempting to regenerate query`);
+            console.log(`[answerWithData] Answer validation failed (attempt ${validationAttempt + 1}/${MAX_RETRY_ATTEMPTS}), regenerating with query context`);
 
-            // Store the suggested fix in the query plan for the retry
             if (validation.suggestedFix && queryPlan) {
                 (queryPlan as any).suggestedFix = validation.suggestedFix;
             }
 
-            // Recursive call with incremented validation attempt counter
-            return answerWithData(question, history, isAdmin, validationAttempt + 1);
+            // Pass the current queryPlan into the next attempt via history augmentation
+            // so the query generator doesn't lose context and return needsData: false.
+            return answerWithData(question, history, isAdmin, signal, validationAttempt + 1, queryPlan);
         }
 
         console.log(`[answerWithData] Final answer generated (valid=${validation.isValid})`);
         return { reply, queryPlan, validation };
     } else {
-        // Max validation attempts reached, return answer anyway with a warning
         console.log(`[answerWithData] Max validation attempts (${MAX_RETRY_ATTEMPTS}) reached, accepting answer despite validation concerns`);
         const validation: ValidationResult = {
             isValid: false,
@@ -571,16 +674,31 @@ router.post("/chat", async (req, res) => {
         return;
     }
 
+    const abortController = new AbortController();
+
     try {
-        const { reply, queryPlan, validation } = await answerWithData(message, history ?? [], !!isAdmin);
-        res.status(200).json({
-            reply,
-            queryPlan: queryPlan ?? null,
-            validation: validation ?? null
-        });
-    } catch (err) {
+        const { reply, queryPlan, validation } = await answerWithData(
+            message,
+            history ?? [],
+            !!isAdmin,
+            abortController.signal
+        );
+        if (!res.headersSent) {
+            res.status(200).json({
+                reply,
+                queryPlan: queryPlan ?? null,
+                validation: validation ?? null
+            });
+        }
+    } catch (err: any) {
+        if (err?.message === "Request aborted by client") {
+            if (!res.headersSent) res.status(499).end();
+            return;
+        }
         console.error(`${AI_PROVIDER} error:`, err);
-        res.status(500).json({ error: `${AI_PROVIDER} request failed` });
+        if (!res.headersSent) {
+            res.status(500).json({ error: `${AI_PROVIDER} request failed` });
+        }
     }
 });
 

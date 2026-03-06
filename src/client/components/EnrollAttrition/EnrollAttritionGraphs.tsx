@@ -2,19 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Graph, { GraphData } from "../../elements/Graph";
-import {ChartConfig} from "./Personnel";
-import {Grade, School, Year} from "../admissions/Admissions";
+import { EnrollChartConfig, School, TABS, Year } from "./EnrollAttrition";
 
-export type AdmissionGraphsProps = {
-    config: ChartConfig;
-    updateConfig: (c: ChartConfig) => void;
+export type EnrollAttritionGraphsProps = {
+    config: EnrollChartConfig;
+    updateConfig: (c: EnrollChartConfig) => void;
     removeChart: () => void;
     clearChart: () => void;
     label: string;
-    availableTabs: string[];
+    field: string;
+    collection: "EnrollAttrition" | "EnrollAttritionSOC";
     schools: School[];
     years: Year[];
-    grades: Grade[];
+    availableTabs: { label: string; field: string }[];
     showRemove: boolean;
     chartNumber?: number;
 };
@@ -25,61 +25,57 @@ type Stats = {
     range: { min: number; max: number };
 };
 
-export default function PersonnelGraphs({ config, updateConfig, removeChart, clearChart, label, availableTabs, schools, years, grades, showRemove, chartNumber }: AdmissionGraphsProps) {
-    const [graphData, setGraphData] = useState<GraphData[]>([]);
+export default function EnrollAttritionGraphs({
+                                                  config,
+                                                  updateConfig,
+                                                  removeChart,
+                                                  clearChart,
+                                                  label,
+                                                  field,
+                                                  collection,
+                                                  schools,
+                                                  years,
+                                                  availableTabs,
+                                                  showRemove,
+                                                  chartNumber,
+                                              }: EnrollAttritionGraphsProps) {
+    const [graphData, setGraphData]                   = useState<GraphData[]>([]);
     const [secondaryGraphData, setSecondaryGraphData] = useState<GraphData[]>([]);
-    const [stats, setStats] = useState<Stats | null>(null);
+    const [stats, setStats]                           = useState<Stats | null>(null);
 
-    async function fetchAdmissions(fieldLabel: string = label) {
-        if (!config.schoolSelection) return [];
+    async function fetchData(fetchField: string, isPrimary: boolean = false): Promise<GraphData[]> {
+        if (!config.schoolSelection || !config.yearSelection) return [];
 
         const params = {
             school: config.schoolSelection,
             year: config.yearSelection,
-            grade: config.gradeSelection,
-            field: fieldLabel.toUpperCase()
+            field: fetchField,
+            collection,
         };
 
-        const queryString = new URLSearchParams(params as any).toString();
+        const queryString = new URLSearchParams(params).toString();
+        const response = await fetch(`/enrollment-attrition?${queryString}`);
+        const data = await response.json();
 
-        if (params.field === "TEACHERS LOST" || params.field === "TEACHERS GAINED") {
-            const response = await fetch(`/personnelAttrition?${queryString}`);
-            const data = await response.json();
-
-
-            if (fieldLabel === label) {
-                console.log(queryString.toString())
-                const statsResponse = await fetch(`/personnelAttritionStats?${queryString}`);
-                const statData = await statsResponse.json();
-                setStats(statData);
-            }
-
-
-            return data.map((row: any): GraphData => ({ x: row.YEAR, y: row.DATA }));
-        } else {
-            const response = await fetch(`/personnel?${queryString}`);
-            const data = await response.json();
-
-            if (fieldLabel === label) {
-                const statsResponse = await fetch(`/personnelStats?${queryString}`);
-                const statData = await statsResponse.json();
-                setStats(statData);
-            }
-
-            return data.map((row: any): GraphData => ({ x: row.YEAR, y: row.DATA }));
+        if (isPrimary) {
+            const statsResponse = await fetch(`/enroll-attrition-stats?${queryString}`);
+            const statData = await statsResponse.json();
+            setStats(statData);
         }
+
+        return data.map((row: any): GraphData => ({ x: row.DESCRIPTION, y: row.VALUE }));
     }
 
     useEffect(() => {
         let isMounted = true;
 
         const loadData = async () => {
-            const primaryData = await fetchAdmissions(label);
-            if (isMounted) setGraphData(primaryData);
+            const primary = await fetchData(field, true);
+            if (isMounted) setGraphData(primary);
 
-            if (config.secondaryLabel) {
-                const secondaryData = await fetchAdmissions(config.secondaryLabel);
-                if (isMounted) setSecondaryGraphData(secondaryData);
+            if (config.secondaryField) {
+                const secondary = await fetchData(config.secondaryField, false);
+                if (isMounted) setSecondaryGraphData(secondary);
             } else {
                 if (isMounted) setSecondaryGraphData([]);
             }
@@ -87,11 +83,16 @@ export default function PersonnelGraphs({ config, updateConfig, removeChart, cle
 
         loadData();
 
-        return () => { isMounted = false };
-    }, [config.schoolSelection, config.yearSelection, config.gradeSelection, config.secondaryLabel, label]);
+        return () => { isMounted = false; };
+    }, [config.schoolSelection, config.yearSelection, field, config.secondaryField, collection]);
 
     const handleChartTypeChange = (newType: string) => {
         updateConfig({ ...config, chartType: newType });
+    };
+
+    const handleSecondaryLabelChange = (newLabel: string) => {
+        const newField = availableTabs.find(t => t.label === newLabel)?.field ?? "";
+        updateConfig({ ...config, secondaryLabel: newLabel, secondaryField: newField });
     };
 
     const isDualAxisCompatible = config.chartType === "line" || config.chartType === "bar";
@@ -109,10 +110,10 @@ export default function PersonnelGraphs({ config, updateConfig, removeChart, cle
                 <select
                     className="border p-1 text-sm rounded outline-none font-semibold text-[#0A3E6C]"
                     value={config.chartType}
-                    onChange={(e) => handleChartTypeChange(e.target.value)}
+                    onChange={e => handleChartTypeChange(e.target.value)}
                 >
-                    <option value="line">Line</option>
                     <option value="bar">Bar</option>
+                    <option value="line">Line</option>
                     <option value="pie">Pie</option>
                     <option value="doughnut">Doughnut</option>
                 </select>
@@ -123,7 +124,20 @@ export default function PersonnelGraphs({ config, updateConfig, removeChart, cle
                     onChange={e => updateConfig({ ...config, schoolSelection: e.target.value })}
                 >
                     <option value="">Select School</option>
-                    {schools.map(s => <option key={s.ID} value={s.ID}>{s.NAME_TX}</option>)}
+                    {schools.map(s => (
+                        <option key={s.ID} value={s.ID}>{s.NAME_TX}</option>
+                    ))}
+                </select>
+
+                <select
+                    className="border p-1 text-sm rounded outline-none"
+                    value={config.yearSelection}
+                    onChange={e => updateConfig({ ...config, yearSelection: e.target.value })}
+                >
+                    <option value="">Select Year</option>
+                    {years.map(y => (
+                        <option key={y.ID} value={y.ID}>{y.SCHOOL_YEAR}</option>
+                    ))}
                 </select>
 
                 {isDualAxisCompatible && (
@@ -131,12 +145,15 @@ export default function PersonnelGraphs({ config, updateConfig, removeChart, cle
                         <select
                             className="border p-1 text-sm rounded outline-none bg-orange-50 text-orange-800 border-orange-200"
                             value={config.secondaryLabel}
-                            onChange={e => updateConfig({ ...config, secondaryLabel: e.target.value })}
+                            onChange={e => handleSecondaryLabelChange(e.target.value)}
                         >
                             <option value="">+ Dual Axis (None)</option>
-                            {availableTabs.filter(tab => tab !== label).map(tab => (
-                                <option key={tab} value={tab}>{tab}</option>
-                            ))}
+                            {availableTabs
+                                .filter(t => t.label !== label)
+                                .map(t => (
+                                    <option key={t.label} value={t.label}>{t.label}</option>
+                                ))
+                            }
                         </select>
 
                         {config.secondaryLabel && (
@@ -167,7 +184,10 @@ export default function PersonnelGraphs({ config, updateConfig, removeChart, cle
                 </button>
 
                 {showRemove && (
-                    <button onClick={removeChart} className="ml-auto text-red-600 text-sm font-bold hover:text-red-800 px-2">
+                    <button
+                        onClick={removeChart}
+                        className="ml-auto text-red-600 text-sm font-bold hover:text-red-800 px-2"
+                    >
                         Remove
                     </button>
                 )}
@@ -193,10 +213,10 @@ export default function PersonnelGraphs({ config, updateConfig, removeChart, cle
                     <div className="flex flex-col justify-center gap-2 w-28 shrink-0">
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide text-center">Peer Group</p>
                         {[
-                            { label: "Avg", value: stats.average },
+                            { label: "Avg",    value: stats.average },
                             { label: "Median", value: stats.median },
-                            { label: "Min", value: stats.range.min },
-                            { label: "Max", value: stats.range.max },
+                            { label: "Min",    value: stats.range.min },
+                            { label: "Max",    value: stats.range.max },
                         ].map(({ label, value }) => (
                             <div key={label} className="bg-[#f0f5fb] rounded-lg p-2 text-center">
                                 <p className="text-xs text-[#0A3E6C] font-semibold uppercase tracking-wide">{label}</p>
