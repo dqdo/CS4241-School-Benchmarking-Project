@@ -1,6 +1,6 @@
 import Button from "../../elements/Button";
 import {ChartType} from "./ChartPage";
-import {ChartConfig} from "../admissions/Admissions";
+import {ChartConfig} from "./GenericGraph";
 
 type ChartGlobalSettingsProps = {
     globalChartType: ChartType;

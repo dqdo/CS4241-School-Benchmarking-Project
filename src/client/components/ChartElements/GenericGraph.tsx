@@ -1,6 +1,18 @@
-import {ChartConfig, Grade, School, Year} from "../admissions/Admissions";
 import {useEffect, useState} from "react";
 import Graph, {GraphData} from "../../elements/Graph";
+
+export type Grade = { ID: number; DESCRIPTION_TX: string; }
+export type School = { NAME_TX: string; ID: number; }
+export type Year = { SCHOOL_YEAR: string; ID: number; }
+export type ChartConfig = {
+    id: number;
+    schoolSelection: string;
+    yearSelection: string;
+    gradeSelection: string;
+    secondaryLabel: string;
+    chartType: string;
+    secondaryChartType: string;
+}
 
 export type GenericGraphProps = {
     config: ChartConfig;
@@ -72,7 +84,6 @@ export default function GenericGraph(props: GenericGraphProps) {
 
 
     useEffect(() => {
-        setGraphData([]);
         props.updateConfig({...props.config, gradeSelection: "", yearSelection: ""})
     }, [props.config.chartType]);
 
