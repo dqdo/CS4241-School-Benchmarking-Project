@@ -71,11 +71,6 @@ app.use("/", chatbotAi);
 let db: Db | undefined = undefined;
 const SCHOOL_NAMESPACE = "https://cs4241-school-benchmarking-project-1.onrender.com/schoolId";
 
-/*
-  Users:
-  admin@gmail.com AdminUser!
-  school-user@gmail.com SchoolUser!
- */
 
 function parseYearRange(req: any) {
     const yearStart = req.query.yearStart ? Number(req.query.yearStart) : undefined;
