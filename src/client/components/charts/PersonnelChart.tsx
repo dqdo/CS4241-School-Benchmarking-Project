@@ -7,6 +7,9 @@ export default function PersonnelChart() {
     async function fetchPersonnel(fieldLabel: string, isPrimary: boolean = false, params: fetchParams) {
         if (!params.school) return [];
 
+        if(!isPrimary) {
+            params.field = fieldLabel.toUpperCase();
+        }
         const queryString = new URLSearchParams(params as any).toString();
 
         if (params.field === "TEACHERS LOST" || params.field === "TEACHERS GAINED") {
@@ -24,9 +27,9 @@ export default function PersonnelChart() {
 
     async function fetchStats(params: fetchParams) {
         if (!params.school) return {average: 0, median: 0, range: {min: 0, max: 0}};
-        if (!params.year && !params.grade) return {average: 0, median: 0, range: {min: 0, max: 0}};
         const queryString = new URLSearchParams(params as any).toString();
-        const statsResponse = await fetch(`/personnelStats?${queryString}`);
+        const fetchString = params.field == "TEACHERS LOST" || params.field === "TEACHERS GAINED" ? "/personnelAttritionStats" : "/personnelStats";
+        const statsResponse = await fetch(`${fetchString}?${queryString}`);
         const statData = await statsResponse.json();
         return statData;
     }

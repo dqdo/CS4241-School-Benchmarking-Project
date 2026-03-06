@@ -30,7 +30,7 @@ export default function EnrollAttritionChart() {
     async function fetchStats(params: fetchParams) {
         if (!params.school) return {average: 0, median: 0, range: {min: 0, max: 0}};
         if (!params.year && !params.grade) return {average: 0, median: 0, range: {min: 0, max: 0}};
-        const field = TABS.find(tab => tab.label.toUpperCase() === params.field.replaceAll("_", " "))?.field || "";
+        const field = TABS.find(tab => tab.field === params.field)?.field || "";
         params.field = field;
         const realParams = { ...params, collection: isSOC ? "EnrollAttritionSOC" : "EnrollAttrition" }
         const queryString = new URLSearchParams(realParams).toString();
