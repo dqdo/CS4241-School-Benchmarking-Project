@@ -11,7 +11,7 @@ export const TABS = [
     "Data Entry",
     "Admissions",
     "Enrollment & Attrition",
-	"Personnel"
+	"Personnel",
 ] as const;
 
 export type Tab = typeof TABS[number]; // for TypeScript to stop being mad

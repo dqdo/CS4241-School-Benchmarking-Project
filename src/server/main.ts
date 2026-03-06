@@ -684,7 +684,7 @@ app.get("/personnelAttrition", async (req, res) => {
     {
       $group: {
         _id: "$year.ID",
-        YEAR: { $first: "$year.ID" },
+        YEAR: { $first: "$year.SCHOOL_YEAR" },
         fullTimeEmployees: { $sum: "$FT_EMPLOYEES" }
       }
     },

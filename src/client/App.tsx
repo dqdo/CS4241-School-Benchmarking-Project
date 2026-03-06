@@ -6,6 +6,10 @@ import DataEntry from "./components/DataEntry";
 import Admissions from "./components/admissions/Admissions";
 import EnrollAttrition from "./components/EnrollAttrition/EnrollAttrition";
 import Personnel from "./components/personnel/Personnel";
+import ChartPage from "./components/ChartElements/ChartPage";
+import AdmissionsChart from "./components/charts/AdmissionsChart";
+import PersonnelChart from "./components/charts/PersonnelChart";
+import EnrollAttritionChart from "./components/charts/EnrollAttritionChart";
 
 function App() {
     const [tabsActive, setTabsActive] = useState<boolean[]>([]);
@@ -29,9 +33,9 @@ function App() {
             <div className="bg-[#F2F2F2] flex-1">
                 {tabsActive[0] && <Dashboard navigateTo={navigateTo} />}
                 {tabsActive[1] && <DataEntry />}
-                {tabsActive[2] && <Admissions />}
-                {tabsActive[3] && <EnrollAttrition />}
-                {tabsActive[4] && <Personnel />}
+                {tabsActive[2] && <AdmissionsChart />}
+                {tabsActive[3] && <EnrollAttritionChart />}
+                {tabsActive[4] && <PersonnelChart />}
             </div>
         </div>
     );

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import Chart, { ChartData, ChartOptions, ChartDataset } from 'chart.js/auto';
+import {ChartType} from "../components/ChartElements/ChartPage";
 
 export type GraphData = {
     x: string | number;
@@ -10,7 +11,7 @@ export type GraphData = {
 
 export type GraphProps = {
     label: string;
-    chartType: "doughnut" | "bar" | "pie" | "line";
+    chartType: ChartType;
     data: GraphData[];
     secondaryLabel?: string;
     secondaryData?: GraphData[];
@@ -34,7 +35,7 @@ export default function Graph(props: GraphProps) {
     useEffect(() => {
         if (!canvasRef.current) return;
 
-        // Clean up previous chart instance before rendering a new one
+        // Clean up previous ChartElements instance before rendering a new one
         if (chartRef.current) {
             chartRef.current.destroy();
         }
