@@ -69,7 +69,7 @@ app.use("/admin", requireAdmin); // get/post path should be /admin/xxx if the ro
 app.use("/", chatbotAi);
 
 let db: Db | undefined = undefined;
-const SCHOOL_NAMESPACE = "https://osprey-school-benchmarking.onrender.com/schoolId";
+const SCHOOL_NAMESPACE = "https://cs4241-school-benchmarking-project-1.onrender.com/schoolId";
 
 
 function parseYearRange(req: any) {
