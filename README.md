@@ -1,6 +1,19 @@
-## Beyond the Base Requirements
+Access the deployed application here:  
+https://osprey-school-benchmarking.onrender.com
 
-Additional components implemented were **Employees (main component)**, **Admissions**, and **Enrollment** (Components A, B, and C within the assignment).
+## Demo Credentials
 
-- **AI Chatbot** for answering data-related questions.
-- **Save Drafts** so users can return and complete forms later with an explicit **“Save Draft”** option.
+Use the following accounts to test the application:
+
+### Admin Account
+- **Email:** admin@gmail.com  
+- **Password:** AdminUser!
+
+### School User Accounts
+**User 1**
+- **Email:** school-user@gmail.com  
+- **Password:** SchoolUser!
+
+**User 2**
+- **Email:** school-user1@gmail.com  
+- **Password:** SchoolUser!
