@@ -22,7 +22,7 @@ const config = {
   authRequired: false,
   auth0Logout: true,
   secret: process.env.AUTH0_SECRET,
-  baseURL: process.env.NODE_ENV === 'production' ? 'https://cs4241-school-benchmarking-project-1.onrender.com' : 'http://localhost:3000',
+  baseURL: process.env.NODE_ENV === 'production' ? 'https://osprey-school-benchmarking.onrender.com' : 'http://localhost:3000',
   clientID: process.env.AUTH0_CLIENT_ID,
   clientSecret: process.env.AUTH0_CLIENT_SECRET,
   issuerBaseURL: process.env.AUTH0_URL,
@@ -69,7 +69,7 @@ app.use("/admin", requireAdmin); // get/post path should be /admin/xxx if the ro
 app.use("/", chatbotAi);
 
 let db: Db | undefined = undefined;
-const SCHOOL_NAMESPACE = "https://cs4241-school-benchmarking-project-1.onrender.com/schoolId";
+const SCHOOL_NAMESPACE = "https://osprey-school-benchmarking.onrender.com/schoolId";
 
 
 function parseYearRange(req: any) {
